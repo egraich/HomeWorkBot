@@ -91,7 +91,7 @@ Two ways to add a book: send the PDF to the bot (`/admin` → Books → Upload v
 - Runs on the free [Hack Club AI](https://ai.hackclub.com) gateway (OpenRouter-backed: DeepSeek, Qwen, Gemini, GPT, GLM and more)
 - [aiogram 3](https://github.com/aiogram/aiogram) for the Telegram side, [PyMuPDF](https://pymupdf.readthedocs.io/) for PDF extraction
 
-**Fair use:** Hack Club AI is for teens and forbids proxies and resale. This bot stays within the rules by being private (whitelist-only), keeping the API key server-side and being free for its users.
+> The `HACKCLUB_API_KEY` only works for Hack Club members, and the service has its own [terms of use](https://docs.ai.hackclub.com/guide/rules) — read them before deploying.
 
 ---
 

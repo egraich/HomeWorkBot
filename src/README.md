@@ -76,7 +76,9 @@ cd src && docker compose up -d --build
 docker compose logs -f homewbot
 ```
 
-Редеплой через webhook-стек `~/projects/ups` — точно как у остальных ботов:
+Редеплой через webhook-стек `~/projects/ups` — точно как у остальных ботов.
+Файлы деплоя (`deploy/up-homewbot.sh`, `deploy/hooks.json`) не в гите — там токен
+вебхука; они лежат локально и на VPS:
 
 ```bash
 cp ~/projects/bots/homewbot/deploy/up-homewbot.sh ~/projects/ups/scripts/
@@ -87,7 +89,7 @@ cp ~/projects/bots/homewbot/deploy/up-homewbot.sh ~/projects/ups/scripts/
 Дальше деплой после пуша в гит = один curl:
 
 ```bash
-curl "http://<vps>:9000/hooks/up-homewbot?token=HOMEWBOT_TOKEN"
+curl "http://<vps>:9000/hooks/up-homewbot?token=<твой-webhook-токен>"
 ```
 
 Скрипт делает ровно то же, что соседи: `git pull origin main` →
@@ -160,7 +162,7 @@ curl "https://api.telegram.org/bot<ТОКЕН_БОТА>/logOut"
 
 ```
 homewbot/                  # = корень этого репо
-├── deploy/
+├── deploy/                # НЕ в гите (там токен вебхука): up-homewbot.sh + hooks.json
 │   ├── up-homewbot.sh     # → скопировать в ~/projects/ups/scripts/
 │   └── hooks.json         # блок up-homewbot → добавить в ~/projects/ups/hooks.json
 ├── .env                   # секреты (не в гите), на уровне бота — как у соседних

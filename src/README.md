@@ -71,15 +71,22 @@ cd src && docker compose up -d --build
 docker compose logs -f homewbot
 ```
 
-Редеплой через webhook-стек `~/projects/ups` (как у остальных ботов):
+Редеплой через webhook-стек `~/projects/ups` — точно как у остальных ботов:
 
-1. `cp ~/projects/bots/homewbot/deploy/up-homewbot.sh ~/projects/ups/scripts/ && chmod +x ~/projects/ups/scripts/up-homewbot.sh`
-2. Добавь блок `up-homewbot` из `deploy/hooks.json` в `/root/projects/ups/hooks.json`
-   (webhook пересчитывает hooks сам, `-hotreload`).
-3. Дальше деплой = один curl после пуша в гит:
-   ```bash
-   curl "http://<vps>:9000/hooks/up-homewbot?token=HOMEWBOT_TOKEN"
-   ```
+```bash
+cp ~/projects/bots/homewbot/deploy/up-homewbot.sh ~/projects/ups/scripts/
+# и добавь блок up-homewbot из deploy/hooks.json в /root/projects/ups/hooks.json
+# (webhook крутится с -hotreload, перезапуск не нужен)
+```
+
+Дальше деплой после пуша в гит = один curl:
+
+```bash
+curl "http://<vps>:9000/hooks/up-homewbot?token=HOMEWBOT_TOKEN"
+```
+
+Скрипт делает ровно то же, что соседи: `git pull origin main` →
+`docker compose up -d --build` → prune образов.
 
 Проверка: `docker compose ps` — контейнер `homewbot`, статус healthy.
 
@@ -111,20 +118,16 @@ docker compose logs -f homewbot
    - пустые страницы (сканы) рендерятся в картинки и распознаются vision-моделью;
    - всё попадает в FTS-индекс — бот находит «упражнение 214» за миллисекунды.
 
-## Свой Telegram Bot API сервер
+## Свой Telegram Bot API сервер (уже подключён)
 
-На сервере уже крутится `~/projects/bots/tgapibot`. Через него снимается лимит
-Bot API в 20 МБ — книги можно будет передавать прямо в чат. Порядок подключения:
+На сервере крутится `~/projects/bots/tgapibot` (`aiogram/telegram-bot-api`, `TELEGRAM_LOCAL=true`),
+он живёт в external-сети **`voicenet`** — контейнер homewbot уже подключён к ней в
+compose. В `.env` стоит `TG_API_BASE=http://tgapibot:8080` — бот ходит к Telegram
+через свой сервер, лимит Bot API в 20 МБ снят: PDF-учебники можно будет кидать
+прямо в чат, бот скачает их через `http://tgapibot:8080/file/...`.
 
-1. Узнай docker-сеть tgapibot:
-   `docker inspect -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}' tgapibot`
-2. В `src/docker-compose.yml` раскомментируй блок `networks` с этим именем и допиши
-   сервису `homewbot` подключение к ней (шаблон уже там).
-3. В `homewbot/.env` поставь `TG_API_BASE=http://tg-bot-api:8080` (имя хоста — как
-   контейнер tgapibot виден в этой сети; проверь по compose-конфигу tgapibot).
-4. `docker compose up -d` — код бота менять не нужно, `TG_API_BASE` подхватывается на лету.
-
-Если tgapibot публикует порт на хосте — ещё проще: `TG_API_BASE=http://<ip-vps>:<порт>`.
+Если нужно вернуть официальный api.telegram.org — просто очисти `TG_API_BASE` в `.env`
+и пересоздай контейнер. Код не меняется.
 
 ## Админка (`/admin`)
 

@@ -12,22 +12,17 @@ services:
     volumes:
       # SQLite + учебники живут на уровень выше src — как *.db соседних ботов
       - ../data:/app/data
+    networks:
+      # voicenet — общая external-сеть, в ней живёт tgapibot (свой Bot API сервер).
+      # С ним бот общается по http://tgapibot:8080 (см. TG_API_BASE в .env)
+      - voicenet
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('https://api.telegram.org', timeout=10)\""]
       interval: 60s
       timeout: 15s
       retries: 3
       start_period: 30s
-    # ── Свой Telegram Bot API сервер (у тебя уже есть: ~/projects/bots/tgapibot) ──
-    # Снимает лимит 20 МБ. Порядок:
-    # 1) узнай сеть tgapibot: docker inspect -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}' tgapibot
-    # 2) раскомментируй networks ниже, подставив имя, и допиши сервису homewbot:
-    #    networks: [default, tgnet]
-    # 3) в ../.env поставь TG_API_BASE=http://tg-bot-api:8080 (имя хоста — как
-    #    контейнер tgapibot виден в этой сети)
-    #
-    # networks:
-    #   default:
-    #   tgnet:
-    #     external: true
-    #     name: <имя-сети-tgapibot>
+
+networks:
+  voicenet:
+    external: true

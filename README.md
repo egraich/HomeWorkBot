@@ -52,7 +52,7 @@ cd src
 | `ALLOWED_IDS` | `123,456` | ids of allowed users — the bot rejects everyone else |
 | `DEFAULT_MODE` | `econ` | `econ` / `medium` / `max` quality preset |
 | `DAILY_BUDGET_USD` | `3.0` | spend limit per UTC day |
-| `TG_API_BASE` | `http://tg-bot-api:8080` | optional: a self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) server, removes Telegram's 20 MB file limit |
+| `TG_API_BASE` | `http://tg-bot-api:8081` | optional: a self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) server, removes Telegram's 20 MB file limit |
 
 ## How it works
 
@@ -76,7 +76,7 @@ Redeploys are `git pull && docker compose up -d --build`; wire them to a webhook
 
 ### Using a self-hosted Telegram Bot API server (optional)
 
-A self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) removes Telegram's 20 MB download limit, so textbooks can be sent as documents right in the chat. Put its container and the bot on a shared Docker network, point `TG_API_BASE` in `.env` at its address (e.g. `http://tg-bot-api:8080`), and log the bot token out of the cloud API once:
+A self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) removes Telegram's 20 MB download limit, so textbooks can be sent as documents right in the chat. Put its container and the bot on a shared Docker network, point `TG_API_BASE` in `.env` at its address (e.g. `http://tg-bot-api:8081`), and log the bot token out of the cloud API once:
 
 ```bash
 curl "https://api.telegram.org/bot<BOT_TOKEN>/logOut"

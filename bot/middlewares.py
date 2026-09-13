@@ -1,0 +1,59 @@
+"""Мидлвари: whitelist-доступ и простой антифлуд."""
+from __future__ import annotations
+
+import logging
+import time
+from typing import Any, Awaitable, Callable
+
+from aiogram import BaseMiddleware
+from aiogram.types import CallbackQuery, Message, User
+
+from bot.config import Config
+
+log = logging.getLogger(__name__)
+
+
+class AuthMiddleware(BaseMiddleware):
+    """Пропускает только tg_id из ADMIN_IDS/ALLOWED_IDS."""
+
+    def __init__(self, cfg: Config) -> None:
+        self.cfg = cfg
+
+    async def __call__(
+        self,
+        handler: Callable[[Any, dict[str, Any]], Awaitable[Any]],
+        event: Message | CallbackQuery,
+        data: dict[str, Any],
+    ) -> Any:
+        user: User | None = data.get("event_from_user")
+        if user is None:
+            return await handler(event, data)
+        if not self.cfg.is_allowed(user.id):
+            log.info("Чужой: %s (%s)", user.id, user.username)
+            if isinstance(event, CallbackQuery):
+                await event.answer("🔒 Приватный бот.", show_alert=True)
+            else:
+                await event.answer("🔒 Приватный бот. Тебя нет в whitelist.")
+            return None
+        return await handler(event, data)
+
+
+class ThrottleMiddleware(BaseMiddleware):
+    """Не больше одного сообщения в секунду на чат — остальное молча дропаем."""
+
+    def __init__(self, interval: float = 1.0) -> None:
+        self.interval = interval
+        self._last: dict[int, float] = {}
+
+    async def __call__(
+        self,
+        handler: Callable[[Any, dict[str, Any]], Awaitable[Any]],
+        event: Message,
+        data: dict[str, Any],
+    ) -> Any:
+        chat_id = event.chat.id if event.chat else 0
+        now = time.monotonic()
+        if now - self._last.get(chat_id, 0.0) < self.interval:
+            return None
+        self._last[chat_id] = now
+        return await handler(event, data)

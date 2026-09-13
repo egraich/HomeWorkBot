@@ -1,0 +1,6 @@
+aiogram>=3.31,<4
+openai>=1.60
+aiosqlite>=0.22
+PyMuPDF>=1.28
+pydantic-settings>=2.7
+httpx>=0.28

@@ -1,0 +1,30 @@
+services:
+  bot:
+    build: .
+    container_name: homeworkbot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('https://api.telegram.org', timeout=10)\""]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 30s
+
+  # ── Будущее: свой Telegram Bot API сервер (снимает лимит 20 МБ на файл) ──
+  # 1) Получи api_id/api_hash на https://my.telegram.org
+  # 2) Раскомментируй блок ниже
+  # 3) В .env поставь TG_API_BASE=http://tg-bot-api:8080
+  # 4) docker compose up -d
+  #
+  # tg-bot-api:
+  #   image: aiogram/telegram-bot-api:latest
+  #   container_name: tg-bot-api
+  #   restart: unless-stopped
+  #   environment:
+  #     TELEGRAM_API_ID: "12345678"
+  #     TELEGRAM_API_HASH: "abcdef0123456789abcdef0123456789"
+  #   volumes:
+  #     - ./tg-bot-api-data:/var/lib/telegram-bot-api

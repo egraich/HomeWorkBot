@@ -24,20 +24,19 @@ class LoggingMiddleware(BaseMiddleware):
     ) -> Any:
         """Measure the handler run and write one structured line per update."""
         user: User | None = data.get("event_from_user")
-        handler_name = getattr(data.get("handler"), "__name__", "<no handler>")
         start = time.monotonic()
         try:
             result = await handler(event, data)
         except Exception:
             log.error(
-                "handler %s failed after %.2fs (user=%s)",
-                handler_name, time.monotonic() - start, getattr(user, "id", "?"),
+                "handler failed after %.2fs (user=%s)",
+                time.monotonic() - start, getattr(user, "id", "?"),
                 exc_info=True,
             )
             raise
         log.info(
-            "handled %s by %s in %.2fs (user=%s)",
-            type(event).__name__, handler_name, time.monotonic() - start,
+            "handled %s in %.2fs (user=%s)",
+            type(event).__name__, time.monotonic() - start,
             getattr(user, "id", "?"),
         )
         return result

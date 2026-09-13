@@ -1,6 +1,8 @@
 """System and user prompts for all roles."""
 from __future__ import annotations
 
+import base64
+
 from bot.db.repo import SessionInfo
 
 KIND_LABELS = {
@@ -90,6 +92,14 @@ STYLE_RULES = {
 }
 
 
+def _image_part(image_bytes: bytes) -> dict:
+    """Build an image content part from raw JPEG bytes."""
+    return {
+        "type": "image_url",
+        "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode()},
+    }
+
+
 def build_ocr_messages(image_data_url: str) -> list[dict]:
     """Build the OCR request messages with an image content part."""
     return [
@@ -123,6 +133,7 @@ def build_plan_messages(
     subject_names: list[str],
     items: list[dict],
     excerpts: list[dict],
+    page_images: list[tuple[int, bytes]] | None = None,
 ) -> list[dict]:
     """Build the planner request from collected materials and textbook excerpts."""
     parts = [f"Класс: {class_name}.", f"Предметы на завтра: {', '.join(subject_names)}.", ""]
@@ -132,18 +143,24 @@ def build_plan_messages(
         text = item["content"] if item["kind"] != "photo" else item["content"][:2000]
         parts.append(f"\n{i}. [{label}]\n{text}")
     if excerpts:
-        parts.append("\nРелевантные страницы учебников:")
+        parts.append("\nРелевантные страницы учебников (текстовый слой может быть "
+                     "искажён для формул — ниже приложены изображения страниц):")
         for e in excerpts:
             parts.append(f"--- стр. {e['page_no']} ---\n{e['text'][:1200]}")
-    return [
-        {
-            "role": "system",
-            "content": PLANNER_SYSTEM.format(
-                class_name=class_name, subjects=", ".join(subject_names)
-            ),
-        },
-        {"role": "user", "content": "\n".join(parts)},
-    ]
+    system = {
+        "role": "system",
+        "content": PLANNER_SYSTEM.format(
+            class_name=class_name, subjects=", ".join(subject_names)
+        ),
+    }
+    user_text = "\n".join(parts)
+    if not page_images:
+        return [system, {"role": "user", "content": user_text}]
+    content: list[dict] = [{"type": "text", "text": user_text}]
+    for page_no, image in page_images:
+        content.append({"type": "text", "text": f"\n\nСтраница {page_no} учебника:"})
+        content.append(_image_part(image))
+    return [system, {"role": "user", "content": content}]
 
 
 def build_dialog_messages(
@@ -151,6 +168,7 @@ def build_dialog_messages(
     subject_names: list[str],
     history: list[dict],
     excerpts: list[dict],
+    extra_image: bytes | None = None,
 ) -> list[dict]:
     """Build the dialog request from trimmed history and textbook excerpts."""
     messages: list[dict] = [
@@ -171,6 +189,20 @@ def build_dialog_messages(
             f"Страница {e['page_no']} учебника:\n{e['text'][:1200]}" for e in excerpts
         )
         messages.append({"role": "system", "content": f"Релевантные фрагменты учебника:\n{ctx}"})
+    if extra_image:
+        messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Фото задания от ученика — решай по нему "
+                        "(распознанный текст выше может быть неточным для формул):",
+                    },
+                    _image_part(extra_image),
+                ],
+            }
+        )
     return messages
 
 

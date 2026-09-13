@@ -289,8 +289,23 @@ async def _make_plan(
     excerpts = await textbook_excerpts(
         services.db, session, [i["content"] for i in items]
     )
-    llm_messages = build_plan_messages(class_name, subject_names, items, excerpts)
 
+    # vision-capable brains get the actual page images: formula text layers
+    # of textbooks are often too mangled to read
+    mode = await services.llm.current_mode()
+    page_images: list[tuple[int, bytes]] = []
+    if services.router.primary_vision(mode, "brain"):
+        for e in excerpts[:2]:
+            row = await services.db.get_textbook(e["textbook_id"])
+            if row:
+                image = await services.textbooks.render_page(row["filename"], e["page_no"])
+                if image:
+                    page_images.append((e["page_no"], image))
+    llm_messages = build_plan_messages(
+        class_name, subject_names, items, excerpts, page_images=page_images
+    )
+
+    await services.db.set_session_status(session.id, "dialog")
     await state.set_state(SessionFSM.dialog)
     await state.update_data(busy=True, session_id=session.id)
     t0 = time.monotonic()
@@ -313,9 +328,11 @@ async def _make_plan(
         )
     except BudgetExceeded as e:
         await bot.send_message(chat_id, f"💸 {e}")
+        await services.db.set_session_status(session.id, "collecting")
         await state.set_state(SessionFSM.collecting)
     except LLMError as e:
         await bot.send_message(chat_id, f"❌ Модели не ответили: {e}")
+        await services.db.set_session_status(session.id, "collecting")
         await state.set_state(SessionFSM.collecting)
     finally:
         await state.update_data(busy=False)

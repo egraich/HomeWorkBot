@@ -1,4 +1,4 @@
-"""Dialog mode: task execution after the plan, essays, questions."""
+"""Dialog mode: task execution after the plan, essays, questions, photos."""
 from __future__ import annotations
 
 import logging
@@ -17,6 +17,7 @@ from bot.services.llm.prompts import (
     build_writer_draft_messages,
     build_writer_final_messages,
 )
+from bot.services.ocr import ocr_image
 from bot.services.planner import textbook_excerpts, trim_history
 from bot.states import SessionFSM
 from bot.utils.tg_helpers import stream_to_telegram
@@ -40,13 +41,14 @@ async def _names(services: Services, session) -> tuple[str, list[str]]:
 
 async def _run_brain(
     message: Message, services: Services, bot: Bot, session, class_name: str,
-    subject_names: list[str], text: str,
+    subject_names: list[str], text: str, image_bytes: bytes | None = None,
 ) -> None:
     """Answer a dialog message with the brain model, streaming to Telegram."""
     history = await services.db.list_messages(session.id, limit=24)
     excerpts = await textbook_excerpts(services.db, session, [text])
     llm_messages = build_dialog_messages(
-        class_name, subject_names, trim_history(history), excerpts
+        class_name, subject_names, trim_history(history), excerpts,
+        extra_image=image_bytes,
     )
     answer = await stream_to_telegram(
         bot, message.chat.id, services.llm.chat_stream("brain", llm_messages),
@@ -74,6 +76,61 @@ async def _run_essay(
         placeholder="✍️ Пишу как живой…",
     )
     await services.db.add_message(session.id, "assistant", "text", answer)
+
+
+@router.message(StateFilter(SessionFSM.dialog), F.photo)
+async def dialog_photo(
+    message: Message, state: FSMContext, services: Services, bot: Bot
+) -> None:
+    """OCR a photo sent in dialog and hand it to the brain (vision when possible)."""
+    data = await state.get_data()
+    if data.get("busy"):
+        await message.answer("⏳ Секунду, доделываю предыдущее…")
+        return
+    session = await services.db.get_session(data.get("session_id", 0))
+    if not session or session.status != "dialog":
+        await state.clear()
+        await message.answer("Сессия закончилась — начни заново через меню.")
+        return
+
+    status = await message.answer("📸 Распознаю…")
+    try:
+        buf = await bot.download(message.photo[-1])
+    except Exception as e:  # noqa: BLE001
+        await status.edit_text(f"❌ Не смог скачать фото: <code>{e}</code>")
+        return
+    if buf is None:
+        await status.edit_text("❌ Не смог скачать фото")
+        return
+    image_bytes = buf.getvalue()
+
+    ocr_text = ""
+    try:
+        ocr_text = await ocr_image(services.llm, image_bytes)
+    except (BudgetExceeded, LLMError):
+        pass
+    await services.db.add_message(
+        session.id, "user", "photo", ocr_text or "[фото без текста]",
+        {"file_id": message.photo[-1].file_id},
+    )
+
+    mode = await services.llm.current_mode()
+    vision = services.router.primary_vision(mode, "brain")
+    await status.edit_text("📸 Принял фото" if vision else "📸 Принял фото, разбираю текст")
+    await state.update_data(busy=True)
+    try:
+        class_name, subject_names = await _names(services, session)
+        await _run_brain(
+            message, services, bot, session, class_name, subject_names,
+            ocr_text or "задание с фото",
+            image_bytes=image_bytes if vision else None,
+        )
+    except BudgetExceeded as e:
+        await message.answer(f"💸 {e}")
+    except LLMError as e:
+        await message.answer(f"❌ Модели не ответили ({e}). Попробуй ещё раз.")
+    finally:
+        await state.update_data(busy=False)
 
 
 @router.message(StateFilter(SessionFSM.dialog), F.text, ~F.text.startswith("/"))

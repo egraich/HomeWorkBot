@@ -137,6 +137,26 @@ class TextbookService:
         log.info("Ingested %s: %d pages (OCR: %d)", pdf_path.name, total, len(empty))
         return {"pages": total, "ocr_pages": len(empty), "is_scanned": is_scanned}
 
+    async def render_page(self, filename: str, page_no: int, dpi: int = 110) -> bytes | None:
+        """Render one page of a stored textbook to JPEG bytes (None if missing)."""
+        pdf = self.cfg.textbooks_dir / filename
+        if not pdf.exists():
+            return None
+        loop = asyncio.get_running_loop()
+
+        def _render() -> bytes:
+            doc = fitz.open(pdf)
+            try:
+                return _page_to_jpeg(doc[page_no - 1])
+            finally:
+                doc.close()
+
+        try:
+            return await loop.run_in_executor(None, _render)
+        except Exception:  # noqa: BLE001
+            log.exception("Failed to render page %s of %s", page_no, filename)
+            return None
+
     async def search(self, textbook_ids: list[int], query: str, limit: int = 3) -> list[dict]:
         """Run a full-text search over the given textbooks' pages."""
         return await self.db.search_pages(textbook_ids, query, limit=limit)

@@ -83,9 +83,11 @@ A self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) remo
 curl "https://api.telegram.org/bot<BOT_TOKEN>/logOut"
 ```
 
-Run the server in local mode (`TELEGRAM_LOCAL=1`) and mount its data directory into the bot's container **at the same path** — in local mode the server returns absolute file paths, so the bot reads files from disk instead of HTTP:
+Run the server in local mode (`TELEGRAM_LOCAL=1`) and mount its data directory into the bot's container **at the same path** — in local mode the server returns absolute file paths, so the bot reads files from disk instead of HTTP. Keep such server-specific edits in an untracked `src/docker-compose.override.yml` (compose merges it automatically) so `git pull` never conflicts:
 
 ```yaml
+services:
+  homewbot:
     volumes:
       - ../data:/app/data
       - /path/to/telegram-bot-api-data:/var/lib/telegram-bot-api:ro

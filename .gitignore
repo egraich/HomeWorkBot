@@ -3,6 +3,8 @@
 
 # server deployment files (may contain webhook tokens)
 deploy/
+# per-server compose overrides (custom networks, volume mounts)
+docker-compose.override.yml
 
 # runtime data (SQLite database, textbooks)
 data/

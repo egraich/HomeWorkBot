@@ -11,9 +11,8 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
-from aiogram.event import ErrorEvent
 from aiogram.exceptions import TelegramConflictError
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, ErrorEvent
 from openai import AsyncOpenAI
 
 from bot.config import Config

@@ -40,13 +40,17 @@ ROUTING: dict[str, dict[Task, ModelSpec]] = {
         "quick": ModelSpec("qwen/qwen3.8-flash", vision=True, extra=NO_THINKING),
         "ocr": ModelSpec("google/gemini-3.8-flash", vision=True),
         "brain": ModelSpec("deepseek/deepseek-v4-pro-0813"),
-        "writer": ModelSpec("~openai/gpt-terra-latest"),
+        # qwen3.8-max думает долго: писателю хватает дефолтного лимита 3500,
+        # при меньшем cap отдаёт пустой content (проверено живьём)
+        "writer": ModelSpec("qwen/qwen3.8-max-0902"),
     },
     "max": {
         "quick": ModelSpec("qwen/qwen3.8-flash", vision=True, extra=NO_THINKING),
         "ocr": ModelSpec("google/gemini-3.8-flash", vision=True),
         "brain": ModelSpec("openai/gpt-6-astra", vision=True),
-        "writer": ModelSpec("anthropic/claude-fable-5.1"),
+        # claude-fable-5.1 не используем: шлюз отдаёт 404 "guardrail settings"
+        # (проверено 2026-09-13 живым вызовом). Лучший работающий стилист — Terra
+        "writer": ModelSpec("~openai/gpt-terra-latest"),
     },
 }
 
@@ -61,8 +65,8 @@ FALLBACKS: dict[Task, list[str]] = {
         "deepseek/deepseek-v4-pro-0813",
         "openai/gpt-6-astra",
     ],
-    "writer": ["~openai/gpt-terra-latest", "z-ai/glm-5.3",
-               "anthropic/claude-fable-5.1"],
+    "writer": ["~openai/gpt-terra-latest", "qwen/qwen3.8-max-0902",
+               "z-ai/glm-5.3", "deepseek/deepseek-v4.1-flash"],
 }
 
 

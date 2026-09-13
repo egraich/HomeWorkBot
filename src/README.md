@@ -37,8 +37,13 @@
 |---|---|---|---|
 | OCR фото | qwen3.8-flash | gemini-3.8-flash | gemini-3.8-flash |
 | Мозг (план, решение, диалог) | deepseek-v4.1-flash | deepseek-v4-pro-0813 | gpt-6-astra |
-| Писатель (сочинения) | deepseek-v4.1-flash | gpt-terra-latest | claude-fable-5.1 |
+| Писатель (сочинения) | deepseek-v4.1-flash | qwen3.8-max-0902 | gpt-terra-latest |
 | Мелочь (квитанции) | ling-3.0-flash-vl:free | qwen3.8-flash | qwen3.8-flash |
+
+Все 10 моделей из таблицы и фолбэков проверены живыми вызовами (2026-09-13).
+`anthropic/claude-fable-5.1` исключён: шлюз hackai отдаёт на него 404 (guardrail).
+`gpt-6-astra` иногда error-ит на стороне шлюза — если упал, фолбэк уводит на
+glm-5.3 → terra → deepseek-v4-pro, бот не молчит.
 
 Таблица — в `src/bot/services/llm/router.py`, правится без знания кода.
 У каждой роли есть цепочка фолбэков: модель недоступна/промолчала → берётся следующая.

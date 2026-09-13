@@ -40,6 +40,28 @@ def unregistered_files(cfg: Config, known_filenames: set[str]) -> list[Path]:
     return out
 
 
+def sanitize_filename(name: str) -> str:
+    """Имя файла из Telegram → безопасное имя PDF (без путей и мусора)."""
+    name = Path(name).name
+    name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "book.pdf"
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    if len(name) > 120:  # запас на суффиксы от unique_path
+        name = name[:-4][:116] + ".pdf"
+    return name
+
+
+def unique_path(directory: Path, filename: str) -> Path:
+    """Не перезаписывать существующие книги: book.pdf → book_1.pdf → ..."""
+    path = directory / filename
+    stem, suffix = path.stem, path.suffix
+    i = 1
+    while path.exists():
+        path = directory / f"{stem}_{i}{suffix}"
+        i += 1
+    return path
+
+
 def _page_to_jpeg(page: "fitz.Page") -> bytes:
     pix = page.get_pixmap(dpi=RENDER_DPI)
     return pix.tobytes("jpeg", jpg_quality=80)

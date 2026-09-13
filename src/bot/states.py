@@ -12,4 +12,5 @@ class SessionFSM(StatesGroup):
 class AdminFSM(StatesGroup):
     adding_class = State()
     adding_subject = State()
-    binding_book = State()  # выбор предмета для PDF из папки
+    uploading_book = State()  # админ шлёт PDF документом
+    binding_book = State()    # выбор предмета для PDF (из папки или из ТГ)

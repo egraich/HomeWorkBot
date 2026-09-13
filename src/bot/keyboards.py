@@ -89,6 +89,7 @@ def admin_back_kb() -> InlineKeyboardMarkup:
 
 def books_kb(unregistered: list, registered_count: int) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
+    kb.button(text="📥 Загрузить книгу через ТГ", callback_data="adm:book:upload")
     if unregistered:
         for i, path in enumerate(unregistered):
             kb.button(text=f"➕ {path.name}", callback_data=f"adm:book:{i}")

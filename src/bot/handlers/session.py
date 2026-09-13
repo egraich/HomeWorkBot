@@ -236,8 +236,8 @@ async def collect_document(
             )
             return
     await message.answer(
-        "📄 PDF и большие файлы в сессию не принимаю — книги грузятся по SSH "
-        "в data/textbooks. Сюда: текст и фото."
+        "📄 PDF в сессию не принимаю — книги грузятся через /admin → «Книги» "
+        "(или по SSH в data/textbooks). Сюда: текст и фото."
     )
 
 

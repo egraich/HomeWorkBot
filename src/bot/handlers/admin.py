@@ -5,7 +5,8 @@ import asyncio
 import logging
 from pathlib import Path
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramEntityTooLarge
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -22,7 +23,7 @@ from bot.keyboards import (
     subjects_admin_kb,
 )
 from bot.services.container import Services
-from bot.services.textbooks import unregistered_files
+from bot.services.textbooks import sanitize_filename, unique_path, unregistered_files
 from bot.states import AdminFSM
 
 router = Router(name="admin")
@@ -128,7 +129,10 @@ async def adm_books(
     if files:
         lines.append(f"\nНезарегистрированных PDF: {len(files)} — выбери и привяжи к предмету:")
     else:
-        lines.append("\nНезарегистрированных PDF нет. Кинь файл в data/textbooks и вернись сюда.")
+        lines.append(
+            "\nНезарегистрированных PDF нет. Кинь файл в data/textbooks по SSH "
+            "или жми 📥 «Загрузить книгу через ТГ»."
+        )
     if registered:
         lines.append("\nУже в базе:")
         for r in registered[:10]:
@@ -180,6 +184,83 @@ async def adm_book_pick(
         f"Книга: <b>{Path(path).name}</b>\nК какому предмету привязать?",
         reply_markup=bind_subject_kb(subjects),
     )
+
+
+# --- загрузка книги прямо в чат ----------------------------------------------
+
+@router.callback_query(F.data == "adm:book:upload")
+async def adm_book_upload(
+    callback: CallbackQuery, state: FSMContext, services: Services
+) -> None:
+    if not _is_admin(services, callback.from_user.id):
+        return
+    await callback.answer()
+    await state.set_state(AdminFSM.uploading_book)
+    await callback.message.edit_text(
+        "📥 Пришли учебник <b>документом</b> (PDF-файлом).\n"
+        "Лимит: 20 МБ через официальный API, без лимита — через tgapibot.\n"
+        "/отмена — выйти."
+    )
+
+
+@router.message(AdminFSM.uploading_book, F.document)
+async def adm_book_upload_doc(
+    message: Message, state: FSMContext, services: Services, bot: Bot
+) -> None:
+    doc = message.document
+    name = doc.file_name or "book.pdf"
+    mime_ok = (
+        name.lower().endswith(".pdf")
+        or doc.mime_type in ("application/pdf", "application/octet-stream")
+    )
+    if not mime_ok:
+        await message.answer("❌ Это не PDF. Пришли именно файл-документ с книгой.")
+        return
+
+    status = await message.answer(f"⏳ Скачиваю <b>{name}</b>…")
+    try:
+        buf = await bot.download(doc)
+    except TelegramEntityTooLarge:
+        await status.edit_text(
+            "❌ Файл больше 20 МБ — официальный Telegram API больше не отдаст. "
+            "Включи tgapibot (TG_API_BASE в .env) или грузи по SSH."
+        )
+        return
+    except Exception as e:  # noqa: BLE001
+        await status.edit_text(f"❌ Не смог скачать: <code>{e}</code>")
+        return
+    if buf is None:
+        await status.edit_text("❌ Не смог скачать файл.")
+        return
+
+    data = buf.getvalue()
+    path = unique_path(services.cfg.textbooks_dir, sanitize_filename(name))
+    services.cfg.textbooks_dir.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    size_mb = len(data) / 1024 / 1024
+    log.info("Книга загружена через ТГ: %s (%.1f МБ)", path.name, size_mb)
+
+    await state.set_state(AdminFSM.binding_book)
+    await state.update_data(pending_path=str(path))
+    subjects = await services.db.list_all_subjects()
+    if not subjects:
+        await state.clear()
+        await status.edit_text(
+            "Книга сохранена, но сначала создай хотя бы один предмет "
+            "(Админка → Классы и предметы), потом привяжи её в «Книги».",
+            reply_markup=admin_back_kb(),
+        )
+        return
+    await status.edit_text(
+        f"✅ Сохранён: <b>{path.name}</b> ({size_mb:.1f} МБ)\n"
+        "К какому предмету привязать?",
+        reply_markup=bind_subject_kb(subjects),
+    )
+
+
+@router.message(AdminFSM.uploading_book)
+async def adm_book_upload_wrong(message: Message) -> None:
+    await message.answer("❌ Жду PDF-документ (именно файл, не фото и не текст). /отмена — выйти.")
 
 
 @router.callback_query(AdminFSM.binding_book, F.data.startswith("adm:bind:"))

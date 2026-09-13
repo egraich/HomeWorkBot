@@ -8,7 +8,7 @@ A Telegram bot that collects tomorrow's homework from texts, forwarded messages 
 ## Quick start (Docker, on a server)
 
 ```bash
-git clone https://github.com/egraich/homeworkbot.git homewbot && cd homewbot
+git clone https://github.com/egraich/homeworkbot.git && cd homeworkbot
 cp .env.example .env && nano .env      # fill in your token, keys and ids
 mkdir -p data && cd src && docker compose up -d --build
 ```
@@ -62,16 +62,19 @@ cd src
 
 ## Deploying to a VPS
 
-The repo is laid out for a `~/projects/bots/<name>/src` server layout (data lives in `homewbot/data/` next to `src`, mounted into the container):
+The compose file keeps runtime data outside the source tree: create a `data/` folder next to `src/` and it gets mounted into the container.
 
 ```bash
-cd ~/projects/bots
-git clone https://github.com/egraich/homeworkbot.git homewbot
-cd homewbot && cp .env.example .env && nano .env
+git clone https://github.com/egraich/homeworkbot.git
+cd homeworkbot && cp .env.example .env && nano .env
 mkdir -p data && cd src && docker compose up -d --build && docker compose logs -f homewbot
 ```
 
-Redeploys can go through a webhook listener ([almir/webhook](https://github.com/adnanh/webhook)) the same way the other bots on the box do: a `git pull` + `docker compose up -d --build` script triggered by an authenticated curl. To route the bot through your own Telegram Bot API server instead of the cloud one (removes the 20 MB limit): put the server's container on a shared Docker network, set `TG_API_BASE` to its address, and call `logOut` on the cloud API once for the token:
+Redeploys are just `git pull && docker compose up -d --build` — wire them to a webhook listener ([webhook](https://github.com/adnanh/webhook)) if you want push-to-deploy.
+
+### Using your own Telegram Bot API server (optional)
+
+A self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) removes Telegram's 20 MB download limit, so textbooks can be sent as documents right in the chat. Put its container and the bot on a shared Docker network, point `TG_API_BASE` in `.env` at its address (e.g. `http://tg-bot-api:8080`), and log the bot token out of the cloud API once:
 
 ```bash
 curl "https://api.telegram.org/bot<BOT_TOKEN>/logOut"

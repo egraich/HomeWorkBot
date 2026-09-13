@@ -1,19 +1,20 @@
-# секреты
+# secrets
 .env
-# деплой-файлы серверные: hooks.json содержит токен вебхука
+
+# server deployment files (may contain webhook tokens)
 deploy/
 
-# zcode / редакторы
-.zcode/
-.vscode/
-.idea/
-
-# рантайм-данные (БД, учебники)
+# runtime data (SQLite database, textbooks)
 data/
 *.sqlite3
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+
+# zcode / editors
+.zcode/
+.vscode/
+.idea/
 
 # python
 __pycache__/
@@ -24,10 +25,10 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-# логи
+# logs
 logs/
 *.log
 
-# ОС
+# OS
 .DS_Store
 Thumbs.db

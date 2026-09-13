@@ -10,13 +10,9 @@ services:
     env_file:
       - ../.env
     volumes:
-      # SQLite + textbooks live one level above src (like *.db of the
-      # neighbor bots) and survive redeploys / git pull
+      # SQLite database and textbooks live next to the repo (in ../data)
+      # so they survive redeploys and git pull
       - ../data:/app/data
-    networks:
-      # voicenet is the shared external network where tgapibot (own Bot API
-      # server) lives; the bot reaches it at http://tgapibot:8080 (TG_API_BASE)
-      - voicenet
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('https://api.telegram.org', timeout=10)\""]
       interval: 60s
@@ -24,6 +20,7 @@ services:
       retries: 3
       start_period: 30s
 
-networks:
-  voicenet:
-    external: true
+  # Optional: to route Telegram traffic through your own telegram-bot-api
+  # server (removes the 20 MB file limit), put this service and your
+  # telegram-bot-api container on a shared Docker network and set
+  # TG_API_BASE in ../.env to its address, e.g. http://tg-bot-api:8080

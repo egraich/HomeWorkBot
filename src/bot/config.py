@@ -21,8 +21,8 @@ def _parse_ids(raw: str | None) -> list[int]:
 
 
 class Config(BaseSettings):
-    # .env is looked up in CWD and one level above: on the server it lives
-    # in bots/homewbot/, next to src (same as the other bots)
+    # .env is looked up in CWD and one level above src, so on a server it
+    # can live next to the source folder instead of inside it
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore"
     )

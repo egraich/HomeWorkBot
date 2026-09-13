@@ -55,13 +55,14 @@ def unique_path(directory: Path, filename: str) -> Path:
 
 
 def extract_references(text: str) -> list[str]:
-    """Extract exercise/page numbers mentioned in a text."""
+    """Extract exercise/page numbers mentioned in a text ("1.43", "5", "214a")."""
     refs = re.findall(
-        r"(?:№\s*|упр(?:ажнение)?\s*|стр(?:аниц[аы]|\.?)\s*)(\d{1,4}[а-я]?)",
+        r"(?:№\s*|упр(?:ажнение)?\s*|стр(?:аниц[аы]|\.?)\s*)"
+        r"(\d{1,4}(?:[.,]\d{1,3})?[а-я]?)",
         text,
         re.IGNORECASE,
     )
-    return list(dict.fromkeys(refs))
+    return list(dict.fromkeys(r.replace(",", ".") for r in refs))
 
 
 def _page_to_jpeg(page: "fitz.Page") -> bytes:

@@ -18,8 +18,8 @@ async def textbook_excerpts(
     db: Database, session: SessionInfo, texts: list[str], limit: int = 4
 ) -> list[dict]:
     """Find textbook pages matching exercise numbers and keywords from texts."""
-    ids = session.subject_ids
-    if not ids or not texts:
+    textbook_ids = await db.textbook_ids_for_subjects(session.subject_ids)
+    if not textbook_ids or not texts:
         return []
 
     queries: list[str] = []
@@ -37,7 +37,7 @@ async def textbook_excerpts(
     for q in queries:
         if len(out) >= limit:
             break
-        for page in await db.search_pages(ids, q, limit=limit):
+        for page in await db.search_pages(textbook_ids, q, limit=limit):
             key = (page["textbook_id"], page["page_no"])
             if key in seen:
                 continue

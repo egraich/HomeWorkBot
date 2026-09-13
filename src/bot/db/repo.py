@@ -176,6 +176,17 @@ class Database:
         row = await cur2.fetchone()
         return int(row["id"])
 
+    async def textbook_ids_for_subjects(self, subject_ids: list[int]) -> list[int]:
+        """Return ids of textbooks bound to the given subject ids."""
+        if not subject_ids:
+            return []
+        placeholders = ",".join("?" * len(subject_ids))
+        cur = await self.conn.execute(
+            f"SELECT DISTINCT id FROM textbooks WHERE subject_id IN ({placeholders})",
+            list(subject_ids),
+        )
+        return [int(r["id"]) for r in await cur.fetchall()]
+
     async def list_textbooks(self) -> list[aiosqlite.Row]:
         """Return all textbooks joined with subject and class names."""
         cur = await self.conn.execute(
@@ -240,7 +251,11 @@ class Database:
         """Full-text search over textbook pages, best matches first."""
         if not textbook_ids or not query.strip():
             return []
-        tokens = [t for t in query.replace("№", " ").split() if len(t) >= 2][:8]
+        # single digits matter ("exercise No. 5"), so keep them too
+        tokens = [
+            t for t in query.replace("№", " ").split()
+            if len(t) >= 2 or t.isdigit()
+        ][:8]
         if not tokens:
             return []
         match = " OR ".join('"' + t.replace('"', "") + '"' for t in tokens)

@@ -32,7 +32,7 @@ Requires **Python 3.11+** (nothing else — SQLite and FTS5 ship with CPython).
 ```bash
 python -m venv .venv
 .venv\Scripts\pip install -r src\requirements.txt   # Linux/macOS: .venv/bin/pip ...
-copy src\.env.example .env                          # fill it in (see below)
+copy .env.example .env                              # fill it in (see below)
 cd src
 ..\.venv\Scripts\python scripts\smoke_test.py       # live-check the API and all routed models
 ..\.venv\Scripts\python -m bot

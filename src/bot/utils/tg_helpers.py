@@ -1,4 +1,4 @@
-"""Telegram helpers: long-text splitting, markdown-to-HTML, answer streaming."""
+"""Telegram helpers: long-text splitting, markdown-to-HTML, LaTeX to Unicode, streaming."""
 from __future__ import annotations
 
 import html
@@ -14,6 +14,69 @@ log = logging.getLogger(__name__)
 
 TG_LIMIT = 4096
 SPLIT_LIMIT = 3900
+
+_SUPERSCRIPT = {
+    "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵",
+    "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹", "+": "⁺", "-": "⁻", "−": "⁻",
+    "(": "⁽", ")": "⁾", "/": "ᐟ", "=": "⁼", "n": "ⁿ", "a": "ᵃ",
+    "b": "ᵇ", "k": "ᵏ", "m": "ᵐ", "x": "ˣ", "i": "ⁱ",
+}
+_SUBSCRIPT = {
+    "0": "₀", "1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅",
+    "6": "₆", "7": "₇", "8": "₈", "9": "₉", "+": "₊", "-": "₋", "−": "₋",
+}
+_LATEX_COMMANDS = [
+    ("\\left", ""), ("\\right", ""), ("\\!", ""), ("\\,", " "), ("\\;", " "),
+    ("\\cdot", "·"), ("\\times", "×"), ("\\div", ":"), ("\\pm", "±"),
+    ("\\approx", "≈"), ("\\neq", "≠"), ("\\le", "≤"), ("\\ge", "≥"),
+    ("\\sqrt", "√"), ("\\pi", "π"), ("\\alpha", "α"), ("\\beta", "β"),
+    ("\\gamma", "γ"), ("\\infty", "∞"), ("\\log", "log"), ("\\ln", "ln"),
+    ("\\sin", "sin"), ("\\cos", "cos"), ("\\tg", "tg"), ("\\dfrac", "\\frac"),
+    ("\\tfrac", "\\frac"),
+]
+
+
+def _to_script(content: str, table: dict[str, str]) -> str:
+    """Map each character of content to its superscript/subscript variant."""
+    out: list[str] = []
+    for ch in content:
+        out.append(table.get(ch, ch))
+    return "".join(out)
+
+
+def latex_to_unicode(text: str) -> str:
+    """Convert $...$ LaTeX fragments to plain Unicode that Telegram renders well."""
+
+    def _convert_expr(expr: str) -> str:
+        for cmd, rep in _LATEX_COMMANDS:
+            expr = expr.replace(cmd, rep)
+        frac = re.compile(r"\\frac\{([^{}]*)\}\{([^{}]*)\}")
+        while True:
+            new = frac.sub(lambda m: f"{m.group(1)}/{m.group(2)}", expr)
+            if new == expr:
+                break
+            expr = new
+        power = re.compile(r"\^\{([^{}]*)\}")
+        while True:
+            new = power.sub(lambda m: _to_script(m.group(1), _SUPERSCRIPT), expr)
+            if new == expr:
+                break
+            expr = new
+        expr = re.sub(r"\^([0-9a-zA-Z])", lambda m: _to_script(m.group(1), _SUPERSCRIPT), expr)
+        index = re.compile(r"_\{([^{}]*)\}")
+        while True:
+            new = index.sub(lambda m: _to_script(m.group(1), _SUBSCRIPT), expr)
+            if new == expr:
+                break
+            expr = new
+        expr = re.sub(r"_([0-9a-zA-Z])", lambda m: _to_script(m.group(1), _SUBSCRIPT), expr)
+        expr = re.sub(r"\{([^{}]*)\}", r"\1", expr)
+        return expr
+
+    def _convert_dollar(m: re.Match) -> str:
+        return _convert_expr(m.group(1))
+
+    return re.sub(r"\$([^$\n]+)\$", _convert_dollar, text)
 
 
 def split_text(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
@@ -37,15 +100,22 @@ def split_text(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
 
 
 def md_to_html(text: str) -> str:
-    """Convert simple markdown to Telegram HTML without external dependencies."""
+    """Convert markdown/LaTeX model output to Telegram HTML without dependencies."""
+    html_tags: list[str] = []
     code_blocks: list[str] = []
 
-    def _stash(m: re.Match) -> str:
-        """Replace a code block with a placeholder to protect it from escaping."""
+    def _stash_code(m: re.Match) -> str:
         code_blocks.append(m.group(1))
         return f"\x00CB{len(code_blocks) - 1}\x00"
 
-    text = re.sub(r"```[a-zA-Z0-9]*\n?(.*?)```", _stash, text, flags=re.S)
+    def _stash_tag(m: re.Match) -> str:
+        html_tags.append(m.group(0))
+        return f"\x00HT{len(html_tags) - 1}\x00"
+
+    text = re.sub(r"```[a-zA-Z0-9]*\n?(.*?)```", _stash_code, text, flags=re.S)
+    # the model is allowed to emit Telegram HTML tags directly (<b>...</b>)
+    text = re.sub(r"</?(?:b|i|u|s|code|pre|u)[^>]*>", _stash_tag, text, flags=re.I)
+
     text = html.escape(text)
     text = re.sub(r"`([^`\n]+)`", r"<code>\1</code>", text)
     text = re.sub(r"\*\*([^*\n]+)\*\*", r"<b>\1</b>", text)
@@ -53,11 +123,14 @@ def md_to_html(text: str) -> str:
     text = re.sub(r"^#{1,6}\s*(.+)$", r"<b>\1</b>", text, flags=re.M)
     text = re.sub(r"^[-*]\s+", "• ", text, flags=re.M)
 
-    def _unstash(m: re.Match) -> str:
-        """Restore a stashed code block as an HTML <pre> element."""
+    def _unstash_code(m: re.Match) -> str:
         return "<pre>" + html.escape(code_blocks[int(m.group(1))]) + "</pre>"
 
-    return re.sub(r"\x00CB(\d+)\x00", _unstash, text)
+    def _unstash_tag(m: re.Match) -> str:
+        return html_tags[int(m.group(1))]
+
+    text = re.sub(r"\x00CB(\d+)\x00", _unstash_code, text)
+    return re.sub(r"\x00HT(\d+)\x00", _unstash_tag, text)
 
 
 class StreamEditor:
@@ -108,7 +181,7 @@ class StreamEditor:
         """Set the final formatted text, sending the overflow as new messages."""
         if not full_text.strip():
             full_text = "(пустой ответ модели)"
-        formatted = md_to_html(full_text)
+        formatted = md_to_html(latex_to_unicode(full_text))
         chunks = split_text(formatted) or ["(пусто)"]
         await self._edit(chunks[0][:TG_LIMIT - 1] + "…"
                          if len(chunks) > 1 else chunks[0])

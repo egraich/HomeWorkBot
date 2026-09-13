@@ -11,6 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
+from aiogram.event import ErrorEvent
 from aiogram.exceptions import TelegramConflictError
 from aiogram.types import BotCommand
 from openai import AsyncOpenAI
@@ -83,6 +84,24 @@ async def main() -> None:
     dp.callback_query.middleware(AuthMiddleware(cfg))
     dp.message.middleware(ThrottleMiddleware())
     dp.include_routers(*ALL_ROUTERS)
+
+    @dp.errors()
+    async def on_error(event: ErrorEvent) -> bool:
+        """Tell the user something broke and log the exception."""
+        log.error(
+            "unhandled error on update %s: %r",
+            event.update.update_id, event.exception,
+        )
+        cb = event.update.callback_query
+        msg = event.update.message or (cb.message if cb else None)
+        try:
+            if cb:
+                await cb.answer("⚠️ Что-то сломалось — попробуй ещё раз", show_alert=True)
+            elif msg:
+                await msg.answer("⚠️ Что-то сломалось — попробуй ещё раз.")
+        except Exception:  # noqa: BLE001
+            pass
+        return True
 
     await bot.set_my_commands(
         [

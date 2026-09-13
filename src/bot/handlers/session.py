@@ -107,27 +107,6 @@ async def choose_class(
         await show_menu(callback, services, callback.from_user.id)
 
 
-@router.callback_query(SessionFSM.choosing_subjects, F.data.startswith("subj:"))
-async def toggle_subject(
-    callback: CallbackQuery, state: FSMContext, services: Services
-) -> None:
-    """Toggle one subject in the selection and re-render the keyboard."""
-    sid = int(callback.data.split(":")[1])
-    data = await state.get_data()
-    selected: set[int] = set(data.get("selected", []))
-    if sid in selected:
-        selected.discard(sid)
-    else:
-        selected.add(sid)
-    await state.update_data(selected=list(selected))
-    await callback.answer()
-    class_id = await services.db.get_user_class(callback.from_user.id)
-    subjects = await services.db.list_subjects(class_id)
-    await callback.message.edit_reply_markup(
-        reply_markup=subjects_kb(subjects, selected)
-    )
-
-
 @router.callback_query(SessionFSM.choosing_subjects, F.data == "subj:done")
 async def subjects_done(
     callback: CallbackQuery, state: FSMContext, services: Services
@@ -150,6 +129,27 @@ async def subjects_done(
     )
     await callback.answer()
     await callback.message.edit_text(COLLECTING_WELCOME)
+
+
+@router.callback_query(SessionFSM.choosing_subjects, F.data.regexp(r"^subj:\d+$"))
+async def toggle_subject(
+    callback: CallbackQuery, state: FSMContext, services: Services
+) -> None:
+    """Toggle one subject in the selection and re-render the keyboard."""
+    sid = int(callback.data.split(":")[1])
+    data = await state.get_data()
+    selected: set[int] = set(data.get("selected", []))
+    if sid in selected:
+        selected.discard(sid)
+    else:
+        selected.add(sid)
+    await state.update_data(selected=list(selected))
+    await callback.answer()
+    class_id = await services.db.get_user_class(callback.from_user.id)
+    subjects = await services.db.list_subjects(class_id)
+    await callback.message.edit_reply_markup(
+        reply_markup=subjects_kb(subjects, selected)
+    )
 
 
 async def _accept(

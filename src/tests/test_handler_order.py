@@ -24,3 +24,11 @@ def test_class_add_before_class_prefix():
     """adm:cls:add must resolve to the add-prompt, not the subject list."""
     names = _cb_names()
     assert names.index("adm_class_add") < names.index("adm_class_subjects")
+
+
+def test_subjects_done_before_subject_toggle():
+    """subj:done must resolve to the finish handler, not the numeric toggle."""
+    from bot.handlers import session
+
+    names = [h.callback.__name__ for h in session.router.callback_query.handlers]
+    assert names.index("subjects_done") < names.index("toggle_subject")

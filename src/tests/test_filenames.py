@@ -1,10 +1,11 @@
-"""Тесты безопасных имён файлов для книг, загруженных через ТГ."""
+"""Safe file-name tests for books uploaded via Telegram."""
 from pathlib import Path
 
 from bot.services.textbooks import sanitize_filename, unique_path
 
 
 def test_sanitize_strips_paths_and_tricks():
+    """Strip path components and forbidden characters from file names."""
     for raw in [
         "../../etc/passwd.pdf",
         "C:\\Users\\egor\\algebra.pdf",
@@ -18,17 +19,20 @@ def test_sanitize_strips_paths_and_tricks():
 
 
 def test_sanitize_adds_pdf_extension():
+    """Append the .pdf extension when missing and handle empty names."""
     assert sanitize_filename("Книга по физике") == "Книга по физике.pdf"
     assert sanitize_filename("") == "book.pdf"
 
 
 def test_sanitize_caps_length():
+    """Cap very long file names leaving room for unique suffixes."""
     long = "а" * 300 + ".pdf"
     out = sanitize_filename(long)
     assert len(out) == 116 + 4 and out.endswith(".pdf")
 
 
 def test_unique_path_does_not_overwrite(tmp_path: Path):
+    """Generate suffixed paths instead of overwriting existing books."""
     first = unique_path(tmp_path, "book.pdf")
     first.write_bytes(b"1")
     assert first == tmp_path / "book.pdf"

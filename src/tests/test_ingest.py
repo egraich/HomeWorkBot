@@ -1,4 +1,4 @@
-"""Тесты инжеста учебников: текстовые PDF и сканы (OCR-ветка, с моком)."""
+"""Textbook ingest tests: text PDFs and scanned ones (OCR branch, mocked)."""
 from __future__ import annotations
 
 import asyncio
@@ -13,6 +13,7 @@ from bot.services.textbooks import TextbookService, unregistered_files
 
 
 def make_text_pdf(path: Path, page_texts: list[str]) -> None:
+    """Create a small PDF with one text line per page."""
     doc = fitz.open()
     for text in page_texts:
         page = doc.new_page(width=400, height=300)
@@ -22,18 +23,22 @@ def make_text_pdf(path: Path, page_texts: list[str]) -> None:
 
 
 def make_blank_pdf(path: Path, n: int = 3) -> None:
+    """Create a PDF with n empty pages (treated as scans)."""
     doc = fitz.open()
     for _ in range(n):
-        doc.new_page(width=400, height=300)  # пустые страницы = «скан»
+        doc.new_page(width=400, height=300)
     doc.save(path)
     doc.close()
 
 
-class DummyLLM:  # OCR в текстовой ветке не вызывается
+class DummyLLM:
+    """Placeholder for the LLM client (OCR is not used in the text branch)."""
+
     pass
 
 
 def _service(tmp_path: Path, db: Database) -> TextbookService:
+    """Build a TextbookService over a temp data dir."""
     cfg = type("Cfg", (), {"data_dir": tmp_path, "textbooks_dir": tmp_path / "textbooks"})()
     cfg.textbooks_dir.mkdir(exist_ok=True)
     return TextbookService(cfg, db, DummyLLM())  # type: ignore[arg-type]
@@ -41,6 +46,7 @@ def _service(tmp_path: Path, db: Database) -> TextbookService:
 
 @pytest.fixture()
 def db(tmp_path: Path) -> Database:
+    """Provide a connected temporary database."""
     database = Database(tmp_path / "db.sqlite3")
     asyncio.run(database.connect())
     yield database
@@ -48,11 +54,12 @@ def db(tmp_path: Path) -> Database:
 
 
 def test_ingest_text_pdf(tmp_path: Path, db: Database, monkeypatch):
+    """Ingest a text PDF without touching OCR and find pages via FTS."""
     async def run():
         service = _service(tmp_path, db)
         pdf = tmp_path / "textbooks" / "algebra.pdf"
-        # ASCII: базовый шрифт PyMuPDF не умеет кириллицу (даёт точки).
-        # Кириллический FTS-поиск покрыт в test_db.py напрямую через БД.
+        # ASCII: the base PyMuPDF font has no Cyrillic (renders dots).
+        # Cyrillic FTS search is covered in test_db.py directly on the DB.
         make_text_pdf(pdf, [
             "Square of a sum: (a+b)^2 = a^2 + 2ab + b^2, examples and exercises",
             "Pythagorean theorem: the hypotenuse squared equals legs squared, c^2 = a^2 + b^2",
@@ -63,7 +70,7 @@ def test_ingest_text_pdf(tmp_path: Path, db: Database, monkeypatch):
         tb_id = await db.add_textbook(subj, pdf.name, "algebra")
 
         def _fail(*a, **kw):
-            raise AssertionError("OCR не должен вызываться для текстового PDF")
+            raise AssertionError("OCR must not run for a text PDF")
 
         monkeypatch.setattr(tb_module, "ocr_image", _fail)
 
@@ -79,6 +86,7 @@ def test_ingest_text_pdf(tmp_path: Path, db: Database, monkeypatch):
 
 
 def test_ingest_scanned_pdf_uses_ocr(tmp_path: Path, db: Database, monkeypatch):
+    """Ingest a scanned PDF through the mocked OCR branch with progress."""
     async def run():
         service = _service(tmp_path, db)
         pdf = tmp_path / "textbooks" / "scan.pdf"
@@ -102,15 +110,16 @@ def test_ingest_scanned_pdf_uses_ocr(tmp_path: Path, db: Database, monkeypatch):
         assert stats["pages"] == 4
         assert stats["ocr_pages"] == 4
         assert stats["is_scanned"] is True
-        assert len(progress) > 0  # прогресс доходил до колбэка
+        assert len(progress) > 0
 
         hits = await db.search_pages([tb_id], "РАСПОЗНАННЫЙ", limit=4)
-        assert len(hits) == 4  # все страницы прошли через OCR и попали в индекс
+        assert len(hits) == 4
 
     asyncio.run(run())
 
 
 def test_unregistered_files(tmp_path: Path, db: Database):
+    """List only PDFs that are not registered in the database yet."""
     async def run():
         service = _service(tmp_path, db)
         class_id = await db.add_class("9А")

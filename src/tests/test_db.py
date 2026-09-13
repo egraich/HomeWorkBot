@@ -1,4 +1,4 @@
-"""Тесты слоя БД: схема, CRUD, FTS-поиск, настройки, расходы."""
+"""Database layer tests: schema, CRUD, FTS search, settings, spend."""
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +9,7 @@ from bot.db.repo import Database
 
 
 def with_db(tmp_path: Path, body: Callable[[Database], Awaitable[None]]) -> None:
-    """Открывает БД, гоняет body, закрывает — всё в одном asyncio.run()."""
+    """Open a database, run the async body against it, then close it."""
 
     async def wrapper() -> None:
         db = Database(tmp_path / "db.sqlite3")
@@ -23,13 +23,14 @@ def with_db(tmp_path: Path, body: Callable[[Database], Awaitable[None]]) -> None
 
 
 def test_users_and_classes(tmp_path: Path):
+    """Check user upsert and class/subject CRUD."""
     async def body(db: Database):
         await db.upsert_user(1, "egor", "Егор", True)
         await db.upsert_user(2, "misha", "Миша", False)
         assert await db.get_user_class(1) is None
 
         class_id = await db.add_class("9А")
-        await db.add_class("9А")  # повтор не должен плодить классы
+        await db.add_class("9А")
         classes = await db.list_classes()
         assert len(classes) == 1 and classes[0]["name"] == "9А"
 
@@ -49,6 +50,7 @@ def test_users_and_classes(tmp_path: Path):
 
 
 def test_textbooks_pages_fts(tmp_path: Path):
+    """Check textbook registration, page storage and FTS search."""
     async def body(db: Database):
         class_id = await db.add_class("9А")
         subj = await db.add_subject(class_id, "Алгебра")
@@ -71,7 +73,6 @@ def test_textbooks_pages_fts(tmp_path: Path):
         hits = await db.search_pages([tb_id], "214", limit=3)
         assert hits and hits[0]["page_no"] == 12
 
-        # замена страниц удаляет старые записи и из FTS
         await db.replace_pages(tb_id, [(10, "Совсем другой текст про параболу")])
         hits = await db.search_pages([tb_id], "Виета", limit=3)
         assert hits == []
@@ -80,6 +81,7 @@ def test_textbooks_pages_fts(tmp_path: Path):
 
 
 def test_sessions_and_messages(tmp_path: Path):
+    """Check the session lifecycle and message storage."""
     async def body(db: Database):
         await db.upsert_user(1, "egor", "Егор", False)
         class_id = await db.add_class("9А")
@@ -116,6 +118,7 @@ def test_sessions_and_messages(tmp_path: Path):
 
 
 def test_settings_and_usage(tmp_path: Path):
+    """Check key-value settings and today's spend aggregation."""
     async def body(db: Database):
         assert await db.get_setting("quality_mode", "econ") == "econ"
         await db.set_setting("quality_mode", "max")

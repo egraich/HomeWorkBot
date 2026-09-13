@@ -1,7 +1,4 @@
-"""Единая точка вызова LLM: роутинг по задачам, фолбэки, бюджет, usage.
-
-Все вызовы модели в боте идут через LLMClient.chat / chat_stream.
-"""
+"""Single entry point for every LLM call: task routing, fallbacks, budget."""
 from __future__ import annotations
 
 import asyncio
@@ -16,17 +13,15 @@ from bot.config import Config
 from bot.db.repo import Database
 from bot.services.llm.catalog import ModelCatalog
 from bot.services.llm.router import Router
-from bot.services.llm.usage import BudgetExceeded, Usage  # реэкспорт для хендлеров
+from bot.services.llm.usage import BudgetExceeded, Usage
 
 log = logging.getLogger(__name__)
 
 DEFAULT_MAX_TOKENS = {"quick": 300, "ocr": 3000, "brain": 4500, "writer": 3500}
-# У «думающих» моделей reasoning съедает токены до content — маленькие лимиты
-# дают пустой ответ. Поэтому лимиты щедрые, а не впритык.
 
 
 class LLMError(Exception):
-    """Все кандидаты провалились."""
+    """All model candidates failed."""
 
 
 @dataclass(slots=True)
@@ -39,6 +34,7 @@ class LLMResult:
 
 
 def _estimate_tokens(messages: list[dict]) -> int:
+    """Rough token estimate (~4 chars per token) when usage is missing."""
     total = sum(len(str(m.get("content", ""))) for m in messages)
     return max(1, total // 4)
 
@@ -61,18 +57,18 @@ class LLMClient:
             api_key=cfg.hackclub_api_key,
             base_url=cfg.llm_base_url,
             timeout=httpx.Timeout(180.0, connect=15.0),
-            max_retries=0,  # ретраи и фолбэки — свои
+            max_retries=0,
         )
 
     async def current_mode(self) -> str:
+        """Return the quality mode currently set in settings."""
         mode = await self.db.get_setting("quality_mode", self.cfg.default_mode)
         return mode if mode in ("econ", "medium", "max") else self.cfg.default_mode
 
     async def _candidates(self, task: str) -> list[str]:
+        """Return ordered model candidates for a task in the current mode."""
         mode = await self.current_mode()
         return self.router.candidates(mode, task)
-
-    # --- обычный вызов ----------------------------------------------------
 
     async def chat(
         self,
@@ -82,12 +78,13 @@ class LLMClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> LLMResult:
+        """Run a non-streaming completion, walking the fallback chain on failure."""
         max_tokens = max_tokens or DEFAULT_MAX_TOKENS.get(task)
         mode = await self.current_mode()
         budget_blocked = True
         for model_id in await self._candidates(task):
             if not await self.usage.allows(model_id):
-                log.info("Бюджет исчерпан, пропуск платной модели %s", model_id)
+                log.info("Budget exhausted, skipping paid model %s", model_id)
                 continue
             budget_blocked = False
             extra = self.router.extra_for(mode, task, model_id)
@@ -100,14 +97,14 @@ class LLMClient:
                     extra_body=extra or None,
                 )
             except (NotFoundError, BadRequestError) as e:
-                log.warning("Модель %s не приняла запрос (%s), пробую следующую", model_id, e)
+                log.warning("Model %s rejected the request (%s), trying next", model_id, e)
                 continue
             except RateLimitError:
-                log.warning("429 у %s, пауза 5с и повтор", model_id)
+                log.warning("429 at %s, sleeping 5s and retrying", model_id)
                 await asyncio.sleep(5)
                 continue
             except APIError as e:
-                log.warning("Ошибка API у %s: %s", model_id, e)
+                log.warning("API error at %s: %s", model_id, e)
                 continue
             text = resp.choices[0].message.content or ""
             pt = ct = 0
@@ -117,8 +114,7 @@ class LLMClient:
                 pt, ct = _estimate_tokens(messages), max(1, len(text) // 4)
             await self.usage.record(model_id, task, pt, ct)
             if not text.strip():
-                # reasoning-модель сожрала лимит и не ответила — пробуем следующую
-                log.warning("Модель %s вернула пустой content, пробую следующую", model_id)
+                log.warning("Model %s returned empty content, trying next", model_id)
                 continue
             cost = self.catalog.cost_usd(model_id, pt, ct)
             return LLMResult(text=text, model=model_id, prompt_tokens=pt,
@@ -130,8 +126,6 @@ class LLMClient:
             )
         raise LLMError("Ни одна модель не ответила — попробуй ещё раз.")
 
-    # --- стриминг ----------------------------------------------------------
-
     async def chat_stream(
         self,
         task: str,
@@ -140,11 +134,7 @@ class LLMClient:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
-        """Асинхронный генератор дельт текста. Usage пишется в конце потока.
-
-        Если модель упала до первой дельты — переключается на следующего
-        кандидата; если в середине — просто завершает поток (текст частичный).
-        """
+        """Yield text deltas of a streamed completion with fallback handling."""
         max_tokens = max_tokens or DEFAULT_MAX_TOKENS.get(task)
         pt_est = _estimate_tokens(messages)
         mode = await self.current_mode()
@@ -174,10 +164,10 @@ class LLMClient:
                         stream=True,
                     )
                 except (NotFoundError, BadRequestError, RateLimitError) as e:
-                    log.warning("Модель %s не стримит (%s), пробую следующую", model_id, e)
+                    log.warning("Model %s can't stream (%s), trying next", model_id, e)
                     continue
             except (NotFoundError, RateLimitError) as e:
-                log.warning("Модель %s: %s, пробую следующую", model_id, e)
+                log.warning("Model %s: %s, trying next", model_id, e)
                 continue
 
             collected: list[str] = []
@@ -192,10 +182,10 @@ class LLMClient:
                         collected.append(delta)
                         yield delta
             except APIError as e:
-                log.warning("Поток %s оборвался: %s", model_id, e)
+                log.warning("Stream from %s broke: %s", model_id, e)
 
             if not collected:
-                log.warning("Модель %s отдала пустой поток, пробую следующую", model_id)
+                log.warning("Model %s produced an empty stream, trying next", model_id)
                 if pt or ct:
                     await self.usage.record(model_id, task, pt, ct)
                 continue

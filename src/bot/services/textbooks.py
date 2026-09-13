@@ -1,12 +1,4 @@
-"""Учебники: сканирование папки, инжест PDF, полнотекстовый поиск.
-
-Пайплайн инжеста:
-1. PDF лежит в data/textbooks/ (кладётся по SSH).
-2. PyMuPDF извлекает текст каждой страницы.
-3. Пустые страницы считаются сканами: если их > 30% — книга помечается
-   is_scanned, и они прогоняются через vision-OCR (страница → PNG → модель).
-4. Всё складывается в pages + FTS5-индекс.
-"""
+"""Textbooks: folder scan, PDF ingestion and full-text page search."""
 from __future__ import annotations
 
 import asyncio
@@ -23,14 +15,14 @@ from bot.services.ocr import ocr_image
 
 log = logging.getLogger(__name__)
 
-MIN_PAGE_CHARS = 30  # меньше — считаем страницу «пустой» (скан)
+MIN_PAGE_CHARS = 30
 SCANNED_RATIO = 0.3
 RENDER_DPI = 150
 OCR_CONCURRENCY = 3
 
 
 def unregistered_files(cfg: Config, known_filenames: set[str]) -> list[Path]:
-    """PDF в папке textbooks, которых ещё нет в БД."""
+    """Return PDFs in the textbooks folder that are not in the database yet."""
     if not cfg.textbooks_dir.exists():
         return []
     out = []
@@ -41,18 +33,18 @@ def unregistered_files(cfg: Config, known_filenames: set[str]) -> list[Path]:
 
 
 def sanitize_filename(name: str) -> str:
-    """Имя файла из Telegram → безопасное имя PDF (без путей и мусора)."""
+    """Turn a Telegram file name into a safe PDF file name."""
     name = Path(name).name
     name = re.sub(r'[\\/:*?"<>|]+', "_", name).strip() or "book.pdf"
     if not name.lower().endswith(".pdf"):
         name += ".pdf"
-    if len(name) > 120:  # запас на суффиксы от unique_path
+    if len(name) > 120:
         name = name[:-4][:116] + ".pdf"
     return name
 
 
 def unique_path(directory: Path, filename: str) -> Path:
-    """Не перезаписывать существующие книги: book.pdf → book_1.pdf → ..."""
+    """Return a path in the directory that does not overwrite existing files."""
     path = directory / filename
     stem, suffix = path.stem, path.suffix
     i = 1
@@ -62,7 +54,18 @@ def unique_path(directory: Path, filename: str) -> Path:
     return path
 
 
+def extract_references(text: str) -> list[str]:
+    """Extract exercise/page numbers mentioned in a text."""
+    refs = re.findall(
+        r"(?:№\s*|упр(?:ажнение)?\s*|стр(?:аниц[аы]|\.?)\s*)(\d{1,4}[а-я]?)",
+        text,
+        re.IGNORECASE,
+    )
+    return list(dict.fromkeys(refs))
+
+
 def _page_to_jpeg(page: "fitz.Page") -> bytes:
+    """Render a PDF page to JPEG bytes at the configured DPI."""
     pix = page.get_pixmap(dpi=RENDER_DPI)
     return pix.tobytes("jpeg", jpg_quality=80)
 
@@ -79,9 +82,9 @@ class TextbookService:
         pdf_path: Path,
         subject_id: int,
         textbook_id: int,
-        progress_cb=None,  # async callable(done, total, ocr_pages)
+        progress_cb=None,
     ) -> dict:
-        """Инжест одного PDF. Возвращает статистику."""
+        """Ingest one PDF: extract text, OCR empty pages, rebuild the index."""
         loop = asyncio.get_running_loop()
 
         def _extract():
@@ -103,6 +106,7 @@ class TextbookService:
         sem = asyncio.Semaphore(OCR_CONCURRENCY)
 
         async def _ocr_page(page_no: int, page: "fitz.Page") -> tuple[int, str]:
+            """OCR a single rendered page under the concurrency semaphore."""
             nonlocal ocr_done
             async with sem:
                 img = await loop.run_in_executor(None, _page_to_jpeg, page)
@@ -129,26 +133,9 @@ class TextbookService:
         await self.db.finish_textbook(
             textbook_id, pages=total, ocr_pages=len(empty), is_scanned=is_scanned
         )
-        log.info("Инжест %s: %d стр. (OCR: %d)", pdf_path.name, total, len(empty))
+        log.info("Ingested %s: %d pages (OCR: %d)", pdf_path.name, total, len(empty))
         return {"pages": total, "ocr_pages": len(empty), "is_scanned": is_scanned}
 
-    async def start_ingest_task(self, pdf_path: Path, subject_id: int, textbook_id: int) -> asyncio.Task:
-        task = asyncio.create_task(
-            self.ingest(pdf_path, subject_id, textbook_id)
-        )
-        self._tasks[textbook_id] = task
-        task.add_done_callback(lambda _: self._tasks.pop(textbook_id, None))
-        return task
-
     async def search(self, textbook_ids: list[int], query: str, limit: int = 3) -> list[dict]:
+        """Run a full-text search over the given textbooks' pages."""
         return await self.db.search_pages(textbook_ids, query, limit=limit)
-
-
-def extract_references(text: str) -> list[str]:
-    """Номера упражнений/страниц из текста — для поиска по учебнику."""
-    refs = re.findall(
-        r"(?:№\s*|упр(?:ажнение)?\s*|стр(?:аниц[аы]|\.?)\s*)(\d{1,4}[а-я]?)",
-        text,
-        re.IGNORECASE,
-    )
-    return list(dict.fromkeys(refs))

@@ -1,4 +1,4 @@
-"""Системные и пользовательские промпты для всех ролей."""
+"""System and user prompts for all roles."""
 from __future__ import annotations
 
 from bot.db.repo import SessionInfo
@@ -91,6 +91,7 @@ STYLE_RULES = {
 
 
 def build_ocr_messages(image_data_url: str) -> list[dict]:
+    """Build the OCR request messages with an image content part."""
     return [
         {"role": "system", "content": OCR_SYSTEM},
         {
@@ -103,6 +104,7 @@ def build_ocr_messages(image_data_url: str) -> list[dict]:
 
 
 def build_receipt_messages(ocr_text: str) -> list[dict]:
+    """Build the short receipt request describing a recognized photo."""
     return [
         {"role": "system", "content": QUICK_SYSTEM},
         {
@@ -116,17 +118,13 @@ def build_receipt_messages(ocr_text: str) -> list[dict]:
     ]
 
 
-def _session_header(session: SessionInfo, subject_names: list[str]) -> str:
-    return f"Класс: {session.class_id or '—'} · Предметы: {', '.join(subject_names)}"
-
-
 def build_plan_messages(
     class_name: str,
     subject_names: list[str],
     items: list[dict],
     excerpts: list[dict],
 ) -> list[dict]:
-    """items: [{kind, content}] — собранные материалы; excerpts: [{page_no, text}]."""
+    """Build the planner request from collected materials and textbook excerpts."""
     parts = [f"Класс: {class_name}.", f"Предметы на завтра: {', '.join(subject_names)}.", ""]
     parts.append("Материалы от ученика:")
     for i, item in enumerate(items, 1):
@@ -154,7 +152,7 @@ def build_dialog_messages(
     history: list[dict],
     excerpts: list[dict],
 ) -> list[dict]:
-    """history: [{role, kind, content}] (хронологическая)."""
+    """Build the dialog request from trimmed history and textbook excerpts."""
     messages: list[dict] = [
         {
             "role": "system",
@@ -177,6 +175,7 @@ def build_dialog_messages(
 
 
 def build_writer_draft_messages(topic: str, class_name: str, requirements: str) -> list[dict]:
+    """Build the essay outline request for the brain model."""
     return [
         {"role": "system", "content": WRITER_DRAFT_SYSTEM},
         {
@@ -193,6 +192,7 @@ def build_writer_draft_messages(topic: str, class_name: str, requirements: str) 
 def build_writer_final_messages(
     topic: str, class_name: str, words: int, draft: str, style: str
 ) -> list[dict]:
+    """Build the final human-style essay request for the writer model."""
     style_rule = STYLE_RULES.get(style, STYLE_RULES["clean"])
     return [
         {"role": "system", "content": WRITER_FINAL_SYSTEM.format(style_rule=style_rule)},

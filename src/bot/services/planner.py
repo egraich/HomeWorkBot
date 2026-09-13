@@ -1,4 +1,4 @@
-"""Сборка ДЗ: материалы сессии + фрагменты учебников → сообщения для моделей."""
+"""Homework assembly: session materials + textbook excerpts -> model messages."""
 from __future__ import annotations
 
 from bot.db.repo import Database, SessionInfo
@@ -9,7 +9,7 @@ MAX_DIALOG_CHARS = 16000
 
 
 async def collect_session_items(db: Database, session: SessionInfo) -> list[dict]:
-    """Все материалы, присланные учеником в сессии (хронологически)."""
+    """Return all user-submitted materials of a session in chronological order."""
     msgs = await db.list_messages(session.id)
     return [m for m in msgs if m["role"] == "user"]
 
@@ -17,11 +17,7 @@ async def collect_session_items(db: Database, session: SessionInfo) -> list[dict
 async def textbook_excerpts(
     db: Database, session: SessionInfo, texts: list[str], limit: int = 4
 ) -> list[dict]:
-    """Поиск релевантных страниц по номерам упражнений и ключевым словам.
-
-    Сначала ищем по явным ссылкам (№ 214, упр 5, стр 33), затем — по
-    содержательным словам последнего сообщения. Дедуп по (книга, страница).
-    """
+    """Find textbook pages matching exercise numbers and keywords from texts."""
     ids = session.subject_ids
     if not ids or not texts:
         return []
@@ -54,7 +50,7 @@ async def textbook_excerpts(
 
 
 def trim_history(history: list[dict], max_chars: int = MAX_DIALOG_CHARS) -> list[dict]:
-    """Обрезает историю диалога до max_chars символов с конца, сохраняя парность."""
+    """Trim dialog history to max_chars from the end, keeping user-first pairs."""
     total = 0
     cut = len(history)
     for i in range(len(history) - 1, -1, -1):

@@ -1,4 +1,4 @@
-"""Админка: режим качества, расходы, книги, классы и предметы."""
+"""Admin panel: quality mode, spend, books, classes and subjects."""
 from __future__ import annotations
 
 import asyncio
@@ -31,10 +31,12 @@ log = logging.getLogger(__name__)
 
 
 def _is_admin(services: Services, tg_id: int) -> bool:
+    """Return True if the user is an admin."""
     return services.cfg.is_admin(tg_id)
 
 
 async def _show_admin_menu(target: Message | CallbackQuery, services: Services) -> None:
+    """Render the admin panel root with the current quality mode."""
     mode = await services.llm.current_mode()
     text = (
         "🛠 <b>Админка</b>\n"
@@ -51,6 +53,7 @@ async def _show_admin_menu(target: Message | CallbackQuery, services: Services) 
 async def cmd_admin(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Open the admin panel (admins only)."""
     if not _is_admin(services, message.from_user.id):
         await message.answer("🔒 Только для админов.")
         return
@@ -62,6 +65,7 @@ async def cmd_admin(
 async def cb_admin(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Open the admin panel from the button (admins only)."""
     if not _is_admin(services, callback.from_user.id):
         await callback.answer("🔒 Только для админов", show_alert=True)
         return
@@ -69,12 +73,11 @@ async def cb_admin(
     await _show_admin_menu(callback, services)
 
 
-# --- режим качества -------------------------------------------------------
-
 @router.callback_query(F.data == "adm:mode")
 async def adm_mode(
     callback: CallbackQuery, services: Services
 ) -> None:
+    """Show the quality-mode switcher."""
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -90,6 +93,7 @@ async def adm_mode(
 async def adm_mode_set(
     callback: CallbackQuery, services: Services
 ) -> None:
+    """Persist the chosen quality mode."""
     if not _is_admin(services, callback.from_user.id):
         return
     mode = callback.data.split(":")[2]
@@ -105,6 +109,7 @@ async def adm_mode_set(
 async def adm_spend(
     callback: CallbackQuery, services: Services
 ) -> None:
+    """Show today's spend summary."""
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -112,12 +117,11 @@ async def adm_spend(
     await callback.message.edit_text(text, reply_markup=admin_back_kb())
 
 
-# --- книги ------------------------------------------------------------------
-
 @router.callback_query(F.data == "adm:books")
 async def adm_books(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Show the books menu with unregistered PDFs from the folder."""
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -150,8 +154,7 @@ async def adm_books(
 async def adm_book_pick(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
-    if not _is_admin(services, callback.from_user.id):
-        return
+    """Pick an unregistered PDF and open the subject binder."""
     idx = callback.data.split(":")[2]
     if idx == "list":
         await callback.answer()
@@ -162,6 +165,8 @@ async def adm_book_pick(
                 f"• {r['filename']} → {r['class_name']}/{r['subject_name']}, {r['pages']} стр."
             )
         await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_kb())
+        return
+    if not _is_admin(services, callback.from_user.id):
         return
     data = await state.get_data()
     files = data.get("pending_files", [])
@@ -186,12 +191,11 @@ async def adm_book_pick(
     )
 
 
-# --- загрузка книги прямо в чат ----------------------------------------------
-
 @router.callback_query(F.data == "adm:book:upload")
 async def adm_book_upload(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Ask the admin to send a PDF document for upload."""
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -207,6 +211,7 @@ async def adm_book_upload(
 async def adm_book_upload_doc(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """Download an uploaded PDF, save it and open the subject binder."""
     doc = message.document
     name = doc.file_name or "book.pdf"
     mime_ok = (
@@ -238,7 +243,7 @@ async def adm_book_upload_doc(
     services.cfg.textbooks_dir.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     size_mb = len(data) / 1024 / 1024
-    log.info("Книга загружена через ТГ: %s (%.1f МБ)", path.name, size_mb)
+    log.info("Book uploaded via TG: %s (%.1f MB)", path.name, size_mb)
 
     await state.set_state(AdminFSM.binding_book)
     await state.update_data(pending_path=str(path))
@@ -260,6 +265,7 @@ async def adm_book_upload_doc(
 
 @router.message(AdminFSM.uploading_book)
 async def adm_book_upload_wrong(message: Message) -> None:
+    """Remind the admin that only a PDF document is expected."""
     await message.answer("❌ Жду PDF-документ (именно файл, не фото и не текст). /отмена — выйти.")
 
 
@@ -267,6 +273,7 @@ async def adm_book_upload_wrong(message: Message) -> None:
 async def adm_bind_book(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Bind the pending PDF to a subject and start ingestion in the background."""
     subject_id = int(callback.data.split(":")[2])
     data = await state.get_data()
     path = Path(data.get("pending_path", ""))
@@ -284,14 +291,16 @@ async def adm_bind_book(
     )
 
     async def progress_cb(done: int, total_ocr: int, pages: int) -> None:
+        """Update the progress message during OCR."""
         try:
             await progress.edit_text(
                 f"⏳ {path.name}: страниц {pages}, OCR {done}/{total_ocr}"
             )
-        except Exception:  # noqa: BLE001 — прогресс не критичен
+        except Exception:  # noqa: BLE001
             pass
 
     async def runner() -> None:
+        """Run ingestion and report the result or failure."""
         try:
             stats = await services.textbooks.ingest(
                 path, subject_id, textbook_id, progress_cb=progress_cb
@@ -303,19 +312,18 @@ async def adm_bind_book(
                 f"Предмет: {subject['name']}"
             )
         except Exception as e:  # noqa: BLE001
-            log.exception("Инжест упал")
+            log.exception("Ingest failed")
             await services.db.fail_textbook(textbook_id)
             await progress.edit_text(f"❌ Инжест упал: <code>{e}</code>")
 
     asyncio.create_task(runner())
 
 
-# --- классы и предметы --------------------------------------------------------
-
 @router.callback_query(F.data == "adm:classes")
 async def adm_classes(
     callback: CallbackQuery, services: Services
 ) -> None:
+    """Show the class management menu."""
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -331,6 +339,7 @@ async def adm_classes(
 async def adm_class_add(
     callback: CallbackQuery, state: FSMContext
 ) -> None:
+    """Ask for a new class name."""
     await callback.answer()
     await state.set_state(AdminFSM.adding_class)
     await callback.message.edit_text(
@@ -342,6 +351,7 @@ async def adm_class_add(
 async def adm_class_add_text(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Create a class from the admin's message."""
     name = (message.text or "").strip()[:32]
     await services.db.add_class(name)
     await state.clear()
@@ -355,9 +365,10 @@ async def adm_class_add_text(
 async def adm_class_subjects(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Show the subject management keyboard for one class."""
     part = callback.data.split(":")[2]
     if part == "add":
-        return  # обработан выше
+        return
     if not _is_admin(services, callback.from_user.id):
         return
     await callback.answer()
@@ -373,6 +384,7 @@ async def adm_class_subjects(
 async def adm_subject_add(
     callback: CallbackQuery, state: FSMContext
 ) -> None:
+    """Ask for a new subject name."""
     class_id = int(callback.data.split(":")[3])
     await callback.answer()
     await state.set_state(AdminFSM.adding_subject)
@@ -386,6 +398,7 @@ async def adm_subject_add(
 async def adm_subject_add_text(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Create a subject from the admin's message."""
     name = (message.text or "").strip()[:64]
     data = await state.get_data()
     class_id = data["class_id"]
@@ -402,6 +415,7 @@ async def adm_subject_add_text(
 async def adm_subject_del(
     callback: CallbackQuery, services: Services
 ) -> None:
+    """Delete a subject and refresh its class keyboard."""
     if not _is_admin(services, callback.from_user.id):
         return
     subject_id = int(callback.data.split(":")[3])

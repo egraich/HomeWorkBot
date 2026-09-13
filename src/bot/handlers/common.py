@@ -1,4 +1,4 @@
-"""Общие хендлеры: /start, меню, помощь, отмена."""
+"""Common handlers: /start, main menu, help, cancel."""
 from __future__ import annotations
 
 from aiogram import F, Router
@@ -26,6 +26,7 @@ HELP_TEXT = (
 async def show_menu(
     target: Message | CallbackQuery, services: Services, user_id: int
 ) -> None:
+    """Render the main menu, reflecting an active session if one exists."""
     active = await services.db.get_active_session(user_id)
     kb = main_menu(services.cfg.is_admin(user_id), active is not None)
     text = "🏠 <b>Главное меню</b>"
@@ -37,6 +38,7 @@ async def show_menu(
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext, services: Services) -> None:
+    """Register the user and show the menu or a first-run class picker."""
     user = message.from_user
     await state.clear()
     await services.db.upsert_user(
@@ -66,11 +68,13 @@ async def cmd_start(message: Message, state: FSMContext, services: Services) -> 
 
 @router.message(Command("help", "помощь"))
 async def cmd_help(message: Message) -> None:
+    """Send the help text."""
     await message.answer(HELP_TEXT)
 
 
 @router.callback_query(F.data == "help")
 async def cb_help(callback: CallbackQuery) -> None:
+    """Send the help text from the menu button."""
     await callback.answer()
     await callback.message.answer(HELP_TEXT)
 
@@ -79,6 +83,7 @@ async def cb_help(callback: CallbackQuery) -> None:
 async def cb_menu(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Reset any FSM state and show the main menu."""
     await state.clear()
     await callback.answer()
     await show_menu(callback, services, callback.from_user.id)
@@ -88,6 +93,7 @@ async def cb_menu(
 async def cmd_cancel(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Cancel the current session and return to the main menu."""
     await state.clear()
     active = await services.db.get_active_session(message.from_user.id)
     if active:

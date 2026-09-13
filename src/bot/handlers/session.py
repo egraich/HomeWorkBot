@@ -1,4 +1,4 @@
-"""Сессия домашки: выбор класса/предметов, режим слушания, составление плана."""
+"""Homework session: class/subject picking, listening mode, plan building."""
 from __future__ import annotations
 
 import logging
@@ -31,6 +31,7 @@ COLLECTING_WELCOME = (
 
 
 async def _subject_rows(services: Services, session: SessionInfo) -> list[dict]:
+    """Return subject rows of a session as dicts."""
     rows = []
     for sid in session.subject_ids:
         s = await services.db.get_subject(sid)
@@ -40,6 +41,7 @@ async def _subject_rows(services: Services, session: SessionInfo) -> list[dict]:
 
 
 async def _class_name(services: Services, session: SessionInfo) -> str:
+    """Return the class name of a session or a generic fallback."""
     if session.class_id:
         c = await services.db.get_class(session.class_id)
         if c:
@@ -47,12 +49,10 @@ async def _class_name(services: Services, session: SessionInfo) -> str:
     return "школьника"
 
 
-# --- старт домашки -------------------------------------------------------
-
-
 async def _start_subjects(
     callback: CallbackQuery, state: FSMContext, services: Services, class_id: int
 ) -> None:
+    """Open the subject multi-select for the given class."""
     subjects = await services.db.list_subjects(class_id)
     if not subjects:
         await callback.answer(
@@ -71,6 +71,7 @@ async def _start_subjects(
 async def hw_start(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Start the homework flow with class picking when needed."""
     await callback.answer()
     class_id = await services.db.get_user_class(callback.from_user.id)
     if class_id is None:
@@ -91,6 +92,7 @@ async def hw_start(
 async def choose_class(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Save the chosen class and continue to subjects or the menu."""
     class_id = int(callback.data.split(":")[1])
     await services.db.set_user_class(callback.from_user.id, class_id)
     await callback.answer()
@@ -108,6 +110,7 @@ async def choose_class(
 async def toggle_subject(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Toggle one subject in the selection and re-render the keyboard."""
     sid = int(callback.data.split(":")[1])
     data = await state.get_data()
     selected: set[int] = set(data.get("selected", []))
@@ -128,6 +131,7 @@ async def toggle_subject(
 async def subjects_done(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Create the session and switch to the listening mode."""
     data = await state.get_data()
     selected = data.get("selected", [])
     if not selected:
@@ -143,13 +147,11 @@ async def subjects_done(
     await callback.message.edit_text(COLLECTING_WELCOME)
 
 
-# --- режим слушания -------------------------------------------------------
-
-
 async def _accept(
     message: Message, state: FSMContext, services: Services, kind: str,
     content: str, meta: dict | None = None, emoji: str = "✅",
 ) -> None:
+    """Store one collected material and confirm with a counter message."""
     data = await state.get_data()
     session_id = data["session_id"]
     await services.db.add_message(session_id, "user", kind, content, meta)
@@ -161,6 +163,7 @@ async def _accept(
 async def collect_text(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Store a text or forwarded message as a homework material."""
     kind = "forward" if message.forward_origin else "text"
     meta = {}
     if message.forward_origin is not None:
@@ -177,6 +180,7 @@ async def collect_text(
 async def collect_photo(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """OCR a photo attachment and store the recognized text."""
     status = await message.answer("📸 Распознаю…")
     photo = message.photo[-1]
     buf = await bot.download(photo)
@@ -209,6 +213,7 @@ async def collect_photo(
 async def collect_document(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """Handle documents: images go to OCR, text files are stored, PDFs rejected."""
     doc = message.document
     mime = doc.mime_type or ""
     if mime.startswith("image/"):
@@ -241,13 +246,11 @@ async def collect_document(
     )
 
 
-# --- план -------------------------------------------------------------------
-
-
 async def _make_plan(
     message_or_cb: Message | CallbackQuery, state: FSMContext,
     services: Services, bot: Bot,
 ) -> None:
+    """Build the structured homework plan from collected materials."""
     chat_id = message_or_cb.chat.id if isinstance(message_or_cb, Message) \
         else message_or_cb.message.chat.id
     data = await state.get_data()
@@ -299,6 +302,7 @@ async def _make_plan(
 async def cb_plan(
     callback: CallbackQuery, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """Trigger plan building from the button."""
     await callback.answer()
     await _make_plan(callback, state, services, bot)
 
@@ -307,15 +311,14 @@ async def cb_plan(
 async def cmd_plan(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """Trigger plan building from the command."""
     await _make_plan(message, state, services, bot)
-
-
-# --- управление сессией -------------------------------------------------------
 
 
 async def _end_session(
     message: Message, state: FSMContext, services: Services, status: str, note: str
 ) -> None:
+    """Close the active session with the given status and show the menu."""
     await state.clear()
     active = await services.db.get_active_session(message.from_user.id)
     if active:
@@ -328,11 +331,13 @@ async def _end_session(
 
 @router.message(Command("стоп", "stop"))
 async def cmd_stop(message: Message, state: FSMContext, services: Services) -> None:
+    """Finish the active session."""
     await _end_session(message, state, services, "done", "⏹ Сессия завершена. Удачи с домашкой!")
 
 
 @router.message(Command("сброс", "reset"))
 async def cmd_reset(message: Message, state: FSMContext, services: Services) -> None:
+    """Cancel the active session and forget collected materials."""
     await _end_session(message, state, services, "cancelled", "♻️ Сессия сброшена, накопленное забыто.")
 
 
@@ -340,6 +345,7 @@ async def cmd_reset(message: Message, state: FSMContext, services: Services) -> 
 async def cb_stop(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Finish the active session from the button."""
     await callback.answer()
     await state.clear()
     active = await services.db.get_active_session(callback.from_user.id)
@@ -355,6 +361,7 @@ async def cb_stop(
 async def cb_reset(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Cancel the active session from the button."""
     await callback.answer()
     await state.clear()
     active = await services.db.get_active_session(callback.from_user.id)
@@ -370,6 +377,7 @@ async def cb_reset(
 async def cb_resume(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Re-enter the active session in its current status."""
     session = await services.db.get_active_session(callback.from_user.id)
     if not session:
         await callback.answer("Нет активной сессии", show_alert=True)

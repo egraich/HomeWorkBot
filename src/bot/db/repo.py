@@ -1,4 +1,4 @@
-"""Слой доступа к SQLite (aiosqlite). Весь SQL — здесь."""
+"""SQLite data-access layer (aiosqlite). All SQL lives here."""
 from __future__ import annotations
 
 import json
@@ -22,6 +22,7 @@ class SessionInfo:
 
 
 def _session_from_row(row: aiosqlite.Row) -> SessionInfo:
+    """Build a SessionInfo from a sessions table row."""
     return SessionInfo(
         id=row["id"],
         user_id=row["user_id"],
@@ -38,9 +39,8 @@ class Database:
         self.path = path
         self._conn: aiosqlite.Connection | None = None
 
-    # --- lifecycle -------------------------------------------------------
-
     async def connect(self) -> None:
+        """Open the connection, apply pragmas and create tables."""
         self._conn = await aiosqlite.connect(self.path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.execute("PRAGMA foreign_keys = ON")
@@ -50,21 +50,22 @@ class Database:
         await self._conn.commit()
 
     async def close(self) -> None:
+        """Close the connection if open."""
         if self._conn:
             await self._conn.close()
             self._conn = None
 
     @property
     def conn(self) -> aiosqlite.Connection:
+        """Return the active connection or raise if not connected."""
         if self._conn is None:
-            raise RuntimeError("Database.connect() не был вызван")
+            raise RuntimeError("Database.connect() must be called first")
         return self._conn
-
-    # --- users -----------------------------------------------------------
 
     async def upsert_user(
         self, tg_id: int, username: str | None, full_name: str | None, is_admin: bool
     ) -> None:
+        """Insert a user or refresh their profile fields."""
         role = "admin" if is_admin else "user"
         await self.conn.execute(
             """
@@ -79,6 +80,7 @@ class Database:
         await self.conn.commit()
 
     async def get_user_class(self, tg_id: int) -> int | None:
+        """Return the user's class id or None."""
         cur = await self.conn.execute(
             "SELECT class_id FROM users WHERE tg_id = ?", (tg_id,)
         )
@@ -86,18 +88,19 @@ class Database:
         return row["class_id"] if row else None
 
     async def set_user_class(self, tg_id: int, class_id: int | None) -> None:
+        """Assign a class to the user."""
         await self.conn.execute(
             "UPDATE users SET class_id = ? WHERE tg_id = ?", (class_id, tg_id)
         )
         await self.conn.commit()
 
-    # --- классы и предметы -------------------------------------------------
-
     async def list_classes(self) -> list[aiosqlite.Row]:
+        """Return all classes ordered by name."""
         cur = await self.conn.execute("SELECT * FROM classes ORDER BY name")
         return list(await cur.fetchall())
 
     async def add_class(self, name: str) -> int:
+        """Create a class (idempotent) and return its id."""
         cur = await self.conn.execute(
             "INSERT OR IGNORE INTO classes (name) VALUES (?)", (name,)
         )
@@ -109,16 +112,19 @@ class Database:
         return int(row["id"])
 
     async def get_class(self, class_id: int) -> aiosqlite.Row | None:
+        """Return a class row by id or None."""
         cur = await self.conn.execute("SELECT * FROM classes WHERE id = ?", (class_id,))
         return await cur.fetchone()
 
     async def list_subjects(self, class_id: int) -> list[aiosqlite.Row]:
+        """Return subjects of one class ordered by name."""
         cur = await self.conn.execute(
             "SELECT * FROM subjects WHERE class_id = ? ORDER BY name", (class_id,)
         )
         return list(await cur.fetchall())
 
     async def list_all_subjects(self) -> list[aiosqlite.Row]:
+        """Return all subjects joined with their class names."""
         cur = await self.conn.execute(
             """
             SELECT s.*, c.name AS class_name FROM subjects s
@@ -129,6 +135,7 @@ class Database:
         return list(await cur.fetchall())
 
     async def add_subject(self, class_id: int, name: str) -> int:
+        """Create a subject (idempotent) and return its id."""
         cur = await self.conn.execute(
             "INSERT OR IGNORE INTO subjects (class_id, name) VALUES (?, ?)",
             (class_id, name),
@@ -143,18 +150,19 @@ class Database:
         return int(row["id"])
 
     async def delete_subject(self, subject_id: int) -> None:
+        """Delete a subject (cascades to its textbooks)."""
         await self.conn.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
         await self.conn.commit()
 
     async def get_subject(self, subject_id: int) -> aiosqlite.Row | None:
+        """Return a subject row by id or None."""
         cur = await self.conn.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,))
         return await cur.fetchone()
-
-    # --- учебники и страницы ------------------------------------------------
 
     async def add_textbook(
         self, subject_id: int, filename: str, title: str | None
     ) -> int:
+        """Register a textbook (idempotent) and return its id."""
         cur = await self.conn.execute(
             "INSERT OR IGNORE INTO textbooks (subject_id, filename, title) VALUES (?, ?, ?)",
             (subject_id, filename, title),
@@ -169,6 +177,7 @@ class Database:
         return int(row["id"])
 
     async def list_textbooks(self) -> list[aiosqlite.Row]:
+        """Return all textbooks joined with subject and class names."""
         cur = await self.conn.execute(
             """
             SELECT t.*, s.name AS subject_name, c.name AS class_name
@@ -181,6 +190,7 @@ class Database:
         return list(await cur.fetchall())
 
     async def get_textbook(self, textbook_id: int) -> aiosqlite.Row | None:
+        """Return a textbook row by id or None."""
         cur = await self.conn.execute(
             "SELECT * FROM textbooks WHERE id = ?", (textbook_id,)
         )
@@ -189,6 +199,7 @@ class Database:
     async def finish_textbook(
         self, textbook_id: int, pages: int, ocr_pages: int, is_scanned: bool
     ) -> None:
+        """Mark a textbook as ready with ingest statistics."""
         await self.conn.execute(
             """
             UPDATE textbooks
@@ -200,13 +211,14 @@ class Database:
         await self.conn.commit()
 
     async def fail_textbook(self, textbook_id: int) -> None:
+        """Mark a textbook as failed after an ingest error."""
         await self.conn.execute(
             "UPDATE textbooks SET status = 'failed' WHERE id = ?", (textbook_id,)
         )
         await self.conn.commit()
 
     async def replace_pages(self, textbook_id: int, rows: list[tuple[int, str]]) -> None:
-        """rows: [(page_no, text)]. Полностью заменяет страницы и FTS-индекс."""
+        """Replace all stored pages and rebuild the FTS index for one textbook."""
         conn = self.conn
         await conn.execute("DELETE FROM pages_fts WHERE page_id IN "
                            "(SELECT id FROM pages WHERE textbook_id = ?)", (textbook_id,))
@@ -225,10 +237,7 @@ class Database:
     async def search_pages(
         self, textbook_ids: list[int], query: str, limit: int = 3
     ) -> list[dict]:
-        """FTS-поиск по страницам указанных учебников.
-
-        Возвращает [{page_no, text, textbook_id}] — лучшие совпадения по rank.
-        """
+        """Full-text search over textbook pages, best matches first."""
         if not textbook_ids or not query.strip():
             return []
         tokens = [t for t in query.replace("№", " ").split() if len(t) >= 2][:8]
@@ -253,11 +262,10 @@ class Database:
             for r in rows
         ]
 
-    # --- сессии ---------------------------------------------------------
-
     async def create_session(
         self, user_id: int, tg_chat_id: int, class_id: int | None, subject_ids: list[int]
     ) -> int:
+        """Create a homework session in 'collecting' status and return its id."""
         cur = await self.conn.execute(
             """
             INSERT INTO sessions (user_id, tg_chat_id, class_id, subject_ids)
@@ -269,6 +277,7 @@ class Database:
         return int(cur.lastrowid)
 
     async def get_active_session(self, user_id: int) -> SessionInfo | None:
+        """Return the user's latest active session or None."""
         cur = await self.conn.execute(
             """
             SELECT * FROM sessions
@@ -281,6 +290,7 @@ class Database:
         return _session_from_row(row) if row else None
 
     async def get_session(self, session_id: int) -> SessionInfo | None:
+        """Return a session by id or None."""
         cur = await self.conn.execute(
             "SELECT * FROM sessions WHERE id = ?", (session_id,)
         )
@@ -288,6 +298,7 @@ class Database:
         return _session_from_row(row) if row else None
 
     async def set_session_status(self, session_id: int, status: str) -> None:
+        """Update session status, stamping ended_at on finish."""
         ended = ", ended_at = datetime('now')" if status in ("done", "cancelled") else ""
         await self.conn.execute(
             f"UPDATE sessions SET status = ?{ended} WHERE id = ?", (status, session_id)
@@ -295,22 +306,23 @@ class Database:
         await self.conn.commit()
 
     async def set_session_essay_style(self, session_id: int, style: str) -> None:
+        """Switch the essay writing style of a session."""
         await self.conn.execute(
             "UPDATE sessions SET essay_style = ? WHERE id = ?", (style, session_id)
         )
         await self.conn.commit()
 
     async def clear_session_messages(self, session_id: int) -> None:
+        """Delete all messages of a session."""
         await self.conn.execute(
             "DELETE FROM messages WHERE session_id = ?", (session_id,)
         )
         await self.conn.commit()
 
-    # --- сообщения --------------------------------------------------------
-
     async def add_message(
         self, session_id: int, role: str, kind: str, content: str, meta: dict | None = None
     ) -> int:
+        """Append a message to a session and return its id."""
         cur = await self.conn.execute(
             "INSERT INTO messages (session_id, role, kind, content, meta) VALUES (?, ?, ?, ?, ?)",
             (session_id, role, kind, content, json.dumps(meta) if meta else None),
@@ -319,6 +331,7 @@ class Database:
         return int(cur.lastrowid)
 
     async def list_messages(self, session_id: int, limit: int | None = None) -> list[dict]:
+        """Return session messages in chronological order (last `limit` if set)."""
         sql = "SELECT * FROM messages WHERE session_id = ? ORDER BY id"
         if limit:
             sql += f" DESC LIMIT {int(limit)}"
@@ -337,6 +350,7 @@ class Database:
         ]
 
     async def count_messages(self, session_id: int, role: str = "user") -> int:
+        """Count messages of one role in a session."""
         cur = await self.conn.execute(
             "SELECT COUNT(*) AS n FROM messages WHERE session_id = ? AND role = ?",
             (session_id, role),
@@ -344,14 +358,14 @@ class Database:
         row = await cur.fetchone()
         return int(row["n"])
 
-    # --- настройки --------------------------------------------------------
-
     async def get_setting(self, key: str, default: str | None = None) -> str | None:
+        """Return a key-value setting or the default."""
         cur = await self.conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
         row = await cur.fetchone()
         return row["value"] if row else default
 
     async def set_setting(self, key: str, value: str) -> None:
+        """Upsert a key-value setting."""
         await self.conn.execute(
             "INSERT INTO settings (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -359,11 +373,10 @@ class Database:
         )
         await self.conn.commit()
 
-    # --- расходы ----------------------------------------------------------
-
     async def add_usage(
         self, model: str, task: str, prompt_tokens: int, completion_tokens: int, cost_usd: float
     ) -> None:
+        """Log one LLM call for spend tracking."""
         await self.conn.execute(
             """
             INSERT INTO usage_log (model, task, prompt_tokens, completion_tokens, cost_usd)
@@ -374,6 +387,7 @@ class Database:
         await self.conn.commit()
 
     async def spent_today(self) -> float:
+        """Return total spend (USD) since UTC midnight."""
         cur = await self.conn.execute(
             "SELECT COALESCE(SUM(cost_usd), 0) AS total FROM usage_log "
             "WHERE ts >= datetime('now', 'start of day')"
@@ -382,6 +396,7 @@ class Database:
         return float(row["total"])
 
     async def usage_today_breakdown(self) -> list[aiosqlite.Row]:
+        """Return today's spend aggregated per task type."""
         cur = await self.conn.execute(
             """
             SELECT task, COUNT(*) AS calls, SUM(prompt_tokens) AS pt,

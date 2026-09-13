@@ -1,4 +1,4 @@
-"""Точка входа: python -m bot"""
+"""Entry point: python -m bot"""
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +28,7 @@ log = logging.getLogger("bot")
 
 
 async def main() -> None:
+    """Wire all services together and start long polling."""
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
@@ -51,7 +52,7 @@ async def main() -> None:
         max_retries=0,
     )
     catalog = ModelCatalog(openai_client)
-    await catalog.refresh()  # при неудаче роутер работает по конфигу
+    await catalog.refresh()
 
     usage = Usage(db, cfg, catalog)
     router = Router(catalog)

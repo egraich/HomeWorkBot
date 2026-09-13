@@ -1,4 +1,4 @@
-"""Диалоговый режим: выполнение задач по плану, сочинения, вопросы."""
+"""Dialog mode: task execution after the plan, essays, questions."""
 from __future__ import annotations
 
 import logging
@@ -30,6 +30,7 @@ DEFAULT_WORDS = 300
 
 
 async def _names(services: Services, session) -> tuple[str, list[str]]:
+    """Return the class name and subject names of a session."""
     from bot.handlers.session import _class_name, _subject_rows
 
     class_name = await _class_name(services, session)
@@ -41,6 +42,7 @@ async def _run_brain(
     message: Message, services: Services, bot: Bot, session, class_name: str,
     subject_names: list[str], text: str,
 ) -> None:
+    """Answer a dialog message with the brain model, streaming to Telegram."""
     history = await services.db.list_messages(session.id, limit=24)
     excerpts = await textbook_excerpts(services.db, session, [text])
     llm_messages = build_dialog_messages(
@@ -57,6 +59,7 @@ async def _run_essay(
     message: Message, services: Services, bot: Bot, session, class_name: str,
     text: str,
 ) -> None:
+    """Write a school essay via the draft-then-humanize pipeline, streaming it."""
     words_match = WORDS_RE.search(text)
     words = int(words_match.group(1)) if words_match else DEFAULT_WORDS
     draft = await services.llm.chat(
@@ -77,6 +80,7 @@ async def _run_essay(
 async def dialog_message(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
+    """Route a dialog message to the essay pipeline or the brain chat."""
     data = await state.get_data()
     if data.get("busy"):
         await message.answer("⏳ Секунду, доделываю предыдущее…")
@@ -109,6 +113,7 @@ async def dialog_message(
 async def toggle_style(
     callback: CallbackQuery, state: FSMContext, services: Services
 ) -> None:
+    """Toggle the essay style between clean and imperfect."""
     data = await state.get_data()
     session = await services.db.get_session(data.get("session_id", 0))
     if not session:
@@ -126,6 +131,7 @@ async def toggle_style(
 async def cmd_style(
     message: Message, state: FSMContext, services: Services
 ) -> None:
+    """Toggle the essay style between clean and imperfect via command."""
     data = await state.get_data()
     session = await services.db.get_session(data.get("session_id", 0))
     if not session:
@@ -142,6 +148,7 @@ async def cmd_style(
 
 @router.message(StateFilter(SessionFSM.dialog), Command("план", "plan"))
 async def cmd_plan_in_dialog(message: Message) -> None:
+    """Explain that the plan already exists when /plan is typed in dialog."""
     await message.answer(
         "📋 План уже составлен — он выше. Командуй задачей по номеру, "
         "или /сброс чтобы собрать новую домашку."

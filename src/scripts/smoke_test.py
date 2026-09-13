@@ -1,14 +1,14 @@
-"""Смоук-тест живого API hackai + всех ролей роутинга.
+"""Live smoke test of the hackai API and every role in the router.
 
-Запуск из корня репо:  python scripts/smoke_test.py
-Делает 5 дешёвых вызовов (общий расход << $0.01) и печатает отчёт:
-1. Каталог моделей (GET /proxy/v1/models) и наличие всех ID из роутера
-2. quick (бесплатная модель) — квантианция
-3. brain — математика
-4. writer — человечный стиль
-5. ocr — распознавание сгенерированной картинки с текстом
-6. streaming — стриминг мозга
-7. Итог: расход за сегодня
+Run from the repo's src/:  python scripts/smoke_test.py
+Makes 5 cheap calls (total cost << $0.01) and prints a report:
+1. Model catalog (GET /proxy/v1/models) and availability of routed ids
+2. quick (free model) - receipt classification
+3. brain - math
+4. writer - human-like style
+5. ocr - recognition of a generated text image
+6. streaming - brain stream
+7. Total: today's spend
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ FAILED = "❌"
 
 
 def make_test_image() -> bytes:
-    """PNG с текстом задания. Только ASCII: базовые шрифты fitz не умеют кириллицу."""
+    """Render a PNG with task text (ASCII only: base fonts lack Cyrillic)."""
     doc = fitz.open()
     page = doc.new_page(width=400, height=200)
     page.insert_text((30, 60), "Algebra, grade 9", fontsize=14)
@@ -50,9 +50,10 @@ def make_test_image() -> bytes:
 
 
 async def main() -> int:
+    """Run all checks and return a non-zero exit code on failures."""
     cfg = Config()
     if not cfg.hackclub_api_key:
-        print(f"{FAILED} HACKCLUB_API_KEY пуст в .env")
+        print(f"{FAILED} HACKCLUB_API_KEY is empty in .env")
         return 1
     cfg.ensure_dirs()
 
@@ -62,27 +63,27 @@ async def main() -> int:
         timeout=httpx.Timeout(120.0, connect=15.0),
         max_retries=0,
     )
-    print("\n=== 1. Каталог моделей ===")
+    print("\n=== 1. Model catalog ===")
     catalog = ModelCatalog(client)
     n = await catalog.refresh()
     if n == 0:
-        print(f"{FAILED} каталог пуст — проверь ключ/сеть. Роутер пойдёт по конфигу.")
+        print(f"{FAILED} empty catalog - check the key/network. Router falls back to config.")
     else:
-        print(f"{PASSED} получил {n} моделей с {cfg.llm_base_url}/models")
+        print(f"{PASSED} got {n} models from {cfg.llm_base_url}/models")
 
     ids = list(dict.fromkeys(all_routed_ids() + [m for v in FALLBACKS.values() for m in v]))
     missing: list[str] = []
     for model_id in ids:
         if not catalog.exists(model_id):
             missing.append(
-                f"   {FAILED} {model_id}  → похожие: {catalog.closest(model_id)}"
+                f"   {FAILED} {model_id}  -> closest: {catalog.closest(model_id)}"
             )
-    print(f"Проверено ID роутинга: {len(ids)}")
+    print(f"Router ids checked: {len(ids)}")
     if missing:
-        print("Отсутствуют в каталоге (надо поправить router.py):")
+        print("Missing from the catalog (fix router.py):")
         print("\n".join(missing))
     else:
-        print(f"{PASSED} все ID из router.py есть в живом каталоге")
+        print(f"{PASSED} every id from router.py exists in the live catalog")
 
     db = Database(cfg.db_path)
     await db.connect()
@@ -90,29 +91,26 @@ async def main() -> int:
     llm = LLMClient(cfg, db, catalog, Router(catalog), usage)
     results: list[tuple[str, bool, str]] = []
 
-    # --- quick: бесплатная модель, квантианция ------------------------------
     try:
         r = await llm.chat(
             "quick",
             build_receipt_messages("Упражнение 214. Решите уравнение x^2 = 49"),
         )
-        results.append(("quick (квантианция)", True, f"{r.model}: {r.text}"))
+        results.append(("quick (receipt)", True, f"{r.model}: {r.text}"))
     except Exception as e:  # noqa: BLE001
-        results.append(("quick (квантианция)", False, str(e)[:200]))
+        results.append(("quick (receipt)", False, str(e)[:200]))
 
-    # --- brain: математика ---------------------------------------------------
     try:
         r = await llm.chat(
             "brain",
             [{"role": "user", "content": "Сколько будет 7*8? Ответь только числом."}],
-            max_tokens=20,
+            max_tokens=100,
         )
         ok = "56" in r.text
-        results.append(("brain (математика)", ok, f"{r.model}: {r.text.strip()[:80]}"))
+        results.append(("brain (math)", ok, f"{r.model}: {r.text.strip()[:80]}"))
     except Exception as e:  # noqa: BLE001
-        results.append(("brain (математика)", False, str(e)[:200]))
+        results.append(("brain (math)", False, str(e)[:200]))
 
-    # --- writer: человечный стиль ---------------------------------------------
     try:
         r = await llm.chat(
             "writer",
@@ -127,20 +125,18 @@ async def main() -> int:
             max_tokens=600,
         )
         results.append(
-            ("writer (стиль)", bool(r.text.strip()), f"{r.model}: {r.text.strip()[:100]}…")
+            ("writer (style)", bool(r.text.strip()), f"{r.model}: {r.text.strip()[:100]}…")
         )
     except Exception as e:  # noqa: BLE001
-        results.append(("writer (стиль)", False, str(e)[:200]))
+        results.append(("writer (style)", False, str(e)[:200]))
 
-    # --- ocr: картинка с текстом -----------------------------------------------
     try:
         text = await ocr_image(llm, make_test_image(), mime="image/png")
         ok = "214" in text
-        results.append(("ocr (картинка с текстом)", ok, f"распознал: {text[:100]!r}"))
+        results.append(("ocr (text image)", ok, f"recognized: {text[:100]!r}"))
     except Exception as e:  # noqa: BLE001
-        results.append(("ocr (картинка с текстом)", False, str(e)[:200]))
+        results.append(("ocr (text image)", False, str(e)[:200]))
 
-    # --- streaming --------------------------------------------------------------
     try:
         chunks = 0
         async for _delta in llm.chat_stream(
@@ -149,29 +145,29 @@ async def main() -> int:
             max_tokens=300,
         ):
             chunks += 1
-        results.append(("streaming (мозг)", chunks > 1, f"{chunks} дельт"))
+        results.append(("streaming (brain)", chunks > 1, f"{chunks} deltas"))
     except Exception as e:  # noqa: BLE001
-        results.append(("streaming (мозг)", False, str(e)[:200]))
+        results.append(("streaming (brain)", False, str(e)[:200]))
 
     spent = await usage.spent_today()
     breakdown = await db.usage_today_breakdown()
     await db.close()
 
-    print("\n=== 2. Живые вызовы по ролям ===")
+    print("\n=== 2. Live calls per role ===")
     failed = 0
     for name, ok, detail in results:
         if not ok:
             failed += 1
         print(f"{PASSED if ok else FAILED} {name}: {detail}")
 
-    print("\n=== 3. Расход (записан в usage_log) ===")
-    print(f"Сегодня: ${spent:.4f} из ${cfg.daily_budget_usd:.2f}")
+    print("\n=== 3. Spend (stored in usage_log) ===")
+    print(f"Today: ${spent:.4f} of ${cfg.daily_budget_usd:.2f}")
     for r in breakdown:
-        print(f"  {r['task']}: {r['calls']} выз., {r['pt'] or 0}+{r['ct'] or 0} ток., ${r['cost']:.4f}")
+        print(f"  {r['task']}: {r['calls']} calls, {r['pt'] or 0}+{r['ct'] or 0} tokens, ${r['cost']:.4f}")
 
-    verdict = "ВСЁ ОК 🎉" if failed == 0 and not missing else \
-        f"есть проблемы: {failed} провальных вызовов, {len(missing)} отсутствующих ID"
-    print(f"\nИТОГ: {verdict}")
+    verdict = "ALL OK" if failed == 0 and not missing else \
+        f"problems: {failed} failed calls, {len(missing)} missing ids"
+    print(f"\nTOTAL: {verdict}")
     return 0 if failed == 0 and not missing else 1
 
 

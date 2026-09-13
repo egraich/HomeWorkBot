@@ -1,7 +1,7 @@
-"""Инлайн-клавиатуры."""
+"""Inline keyboards."""
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import QUALITY_MODES
@@ -10,6 +10,7 @@ MODE_TITLES = {"econ": "🟢 Эконом", "medium": "🟡 Средний", "ma
 
 
 def main_menu(is_admin: bool, active_session: bool) -> InlineKeyboardMarkup:
+    """Build the main menu, showing resume/stop when a session is active."""
     kb = InlineKeyboardBuilder()
     if active_session:
         kb.button(text="▶️ Продолжить сессию", callback_data="sess:resume")
@@ -24,6 +25,7 @@ def main_menu(is_admin: bool, active_session: bool) -> InlineKeyboardMarkup:
 
 
 def classes_kb(classes: list) -> InlineKeyboardMarkup:
+    """Build the class picker."""
     kb = InlineKeyboardBuilder()
     for c in classes:
         kb.button(text=c["name"], callback_data=f"cls:{c['id']}")
@@ -32,6 +34,7 @@ def classes_kb(classes: list) -> InlineKeyboardMarkup:
 
 
 def subjects_kb(subjects: list, selected: set[int]) -> InlineKeyboardMarkup:
+    """Build the multi-select subject picker with checkmarks."""
     kb = InlineKeyboardBuilder()
     for s in subjects:
         mark = "✅" if s["id"] in selected else "⬜"
@@ -43,6 +46,7 @@ def subjects_kb(subjects: list, selected: set[int]) -> InlineKeyboardMarkup:
 
 
 def collecting_kb() -> InlineKeyboardMarkup:
+    """Build the button set shown while collecting homework materials."""
     kb = InlineKeyboardBuilder()
     kb.button(text="📋 Составить план", callback_data="sess:plan")
     kb.button(text="⬅️ Отменить", callback_data="sess:reset")
@@ -51,6 +55,7 @@ def collecting_kb() -> InlineKeyboardMarkup:
 
 
 def dialog_kb(essay_style: str) -> InlineKeyboardMarkup:
+    """Build the dialog-mode controls with the current essay style."""
     kb = InlineKeyboardBuilder()
     style_btn = "✒️ Стиль: чистый" if essay_style == "clean" else "✒️ Стиль: живой"
     kb.button(text=style_btn, callback_data="sess:style")
@@ -60,6 +65,7 @@ def dialog_kb(essay_style: str) -> InlineKeyboardMarkup:
 
 
 def admin_menu() -> InlineKeyboardMarkup:
+    """Build the admin panel root menu."""
     kb = InlineKeyboardBuilder()
     kb.button(text="🎚 Режим качества", callback_data="adm:mode")
     kb.button(text="💰 Расходы сегодня", callback_data="adm:spend")
@@ -71,6 +77,7 @@ def admin_menu() -> InlineKeyboardMarkup:
 
 
 def modes_kb(current: str) -> InlineKeyboardMarkup:
+    """Build the quality-mode switcher with the active mode marked."""
     kb = InlineKeyboardBuilder()
     for mode in QUALITY_MODES:
         mark = "✅" if mode == current else "▫️"
@@ -81,6 +88,7 @@ def modes_kb(current: str) -> InlineKeyboardMarkup:
 
 
 def admin_back_kb() -> InlineKeyboardMarkup:
+    """Build a single back-to-admin button."""
     kb = InlineKeyboardBuilder()
     kb.button(text="⬅️ Админка", callback_data="adm")
     kb.adjust(1)
@@ -88,6 +96,7 @@ def admin_back_kb() -> InlineKeyboardMarkup:
 
 
 def books_kb(unregistered: list, registered_count: int) -> InlineKeyboardMarkup:
+    """Build the books menu: upload button, unregistered PDFs, list."""
     kb = InlineKeyboardBuilder()
     kb.button(text="📥 Загрузить книгу через ТГ", callback_data="adm:book:upload")
     if unregistered:
@@ -100,6 +109,7 @@ def books_kb(unregistered: list, registered_count: int) -> InlineKeyboardMarkup:
 
 
 def bind_subject_kb(subjects: list) -> InlineKeyboardMarkup:
+    """Build the subject picker used to bind a PDF to a subject."""
     kb = InlineKeyboardBuilder()
     for s in subjects:
         kb.button(
@@ -112,6 +122,7 @@ def bind_subject_kb(subjects: list) -> InlineKeyboardMarkup:
 
 
 def classes_admin_kb(classes: list) -> InlineKeyboardMarkup:
+    """Build the class management keyboard with an add-class button."""
     kb = InlineKeyboardBuilder()
     for c in classes:
         kb.button(text=f"🏫 {c['name']}", callback_data=f"adm:cls:{c['id']}")
@@ -122,6 +133,7 @@ def classes_admin_kb(classes: list) -> InlineKeyboardMarkup:
 
 
 def subjects_admin_kb(class_id: int, subjects: list) -> InlineKeyboardMarkup:
+    """Build the subject management keyboard for one class (tap removes)."""
     kb = InlineKeyboardBuilder()
     for s in subjects:
         kb.button(text=f"➖ {s['name']}", callback_data=f"adm:subj:del:{s['id']}")

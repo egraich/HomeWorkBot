@@ -1,4 +1,4 @@
-"""Контейнер сервисов — одна точка сборки зависимостей."""
+"""Services container — the single assembly point for dependencies."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +14,8 @@ from bot.services.textbooks import TextbookService
 
 @dataclass(slots=True)
 class Services:
+    """Bundle of all services passed to handlers via dependency injection."""
+
     cfg: Config
     db: Database
     catalog: ModelCatalog

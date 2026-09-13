@@ -10,11 +10,12 @@ services:
     env_file:
       - ../.env
     volumes:
-      # SQLite + учебники живут на уровень выше src — как *.db соседних ботов
+      # SQLite + textbooks live one level above src (like *.db of the
+      # neighbor bots) and survive redeploys / git pull
       - ../data:/app/data
     networks:
-      # voicenet — общая external-сеть, в ней живёт tgapibot (свой Bot API сервер).
-      # С ним бот общается по http://tgapibot:8080 (см. TG_API_BASE в .env)
+      # voicenet is the shared external network where tgapibot (own Bot API
+      # server) lives; the bot reaches it at http://tgapibot:8080 (TG_API_BASE)
       - voicenet
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('https://api.telegram.org', timeout=10)\""]

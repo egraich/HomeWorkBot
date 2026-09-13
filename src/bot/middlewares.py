@@ -1,4 +1,4 @@
-"""Мидлвари: whitelist-доступ и простой антифлуд."""
+"""Middlewares: whitelist access control and simple anti-flood."""
 from __future__ import annotations
 
 import logging
@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 class AuthMiddleware(BaseMiddleware):
-    """Пропускает только tg_id из ADMIN_IDS/ALLOWED_IDS."""
+    """Allow only tg_ids listed in ADMIN_IDS/ALLOWED_IDS."""
 
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
@@ -25,11 +25,12 @@ class AuthMiddleware(BaseMiddleware):
         event: Message | CallbackQuery,
         data: dict[str, Any],
     ) -> Any:
+        """Reject events from users outside the whitelist."""
         user: User | None = data.get("event_from_user")
         if user is None:
             return await handler(event, data)
         if not self.cfg.is_allowed(user.id):
-            log.info("Чужой: %s (%s)", user.id, user.username)
+            log.info("Stranger: %s (%s)", user.id, user.username)
             if isinstance(event, CallbackQuery):
                 await event.answer("🔒 Приватный бот.", show_alert=True)
             else:
@@ -39,7 +40,7 @@ class AuthMiddleware(BaseMiddleware):
 
 
 class ThrottleMiddleware(BaseMiddleware):
-    """Не больше одного сообщения в секунду на чат — остальное молча дропаем."""
+    """Silently drop messages faster than one per second per chat."""
 
     def __init__(self, interval: float = 1.0) -> None:
         self.interval = interval
@@ -51,6 +52,7 @@ class ThrottleMiddleware(BaseMiddleware):
         event: Message,
         data: dict[str, Any],
     ) -> Any:
+        """Drop the event if it arrives within the throttle interval."""
         chat_id = event.chat.id if event.chat else 0
         now = time.monotonic()
         if now - self._last.get(chat_id, 0.0) < self.interval:

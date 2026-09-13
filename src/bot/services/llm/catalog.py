@@ -1,9 +1,4 @@
-"""Живой каталог моделей hackai: наличие, цены, поддержка vision.
-
-Список и метаданные берутся с GET /proxy/v1/models (OpenRouter-формат):
-у каждой модели есть pricing.prompt / pricing.completion (USD за 1M токенов)
-и architecture.input_modalities (["text", "image"]).
-"""
+"""Live model catalog of the gateway: availability, prices, vision support."""
 from __future__ import annotations
 
 import difflib
@@ -18,7 +13,7 @@ log = logging.getLogger(__name__)
 @dataclass(slots=True)
 class ModelInfo:
     id: str
-    prompt_price: float = 0.0  # USD за 1M токенов
+    prompt_price: float = 0.0
     completion_price: float = 0.0
     vision: bool = False
 
@@ -29,12 +24,11 @@ class ModelCatalog:
         self._models: dict[str, ModelInfo] = {}
 
     async def refresh(self) -> int:
-        """Подтянуть список моделей. Возвращает количество. Не падает никогда:
-        при ошибке каталог остаётся пустым, роутер работает по конфигу."""
+        """Fetch the model list from the gateway; never raises on network errors."""
         try:
             page = await self._client.models.list()
-        except Exception as e:  # noqa: BLE001 — сеть может быть недоступна
-            log.warning("Не удалось получить каталог моделей: %s", e)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Failed to fetch model catalog: %s", e)
             return len(self._models)
         models: dict[str, ModelInfo] = {}
         for m in page.data:
@@ -54,30 +48,35 @@ class ModelCatalog:
                 vision="image" in modalities,
             )
         self._models = models
-        log.info("Каталог моделей обновлён: %d моделей", len(models))
+        log.info("Model catalog refreshed: %d models", len(models))
         return len(models)
 
     def exists(self, model_id: str) -> bool:
+        """Return True if the model is in the catalog (trusts config when empty)."""
         if not self._models:
-            return True  # каталог недоступен — доверяем конфигу
+            return True
         return model_id in self._models
 
     def get(self, model_id: str) -> ModelInfo | None:
+        """Return catalog info for a model or None."""
         return self._models.get(model_id)
 
     def is_vision(self, model_id: str) -> bool:
+        """Return True if the model accepts image input."""
         info = self._models.get(model_id)
         if info:
             return info.vision
-        return True  # без каталога считаем, что умеет (клиент разберётся)
+        return True
 
     def is_free(self, model_id: str) -> bool:
+        """Return True if the model costs nothing per token."""
         if model_id.endswith(":free"):
             return True
         info = self._models.get(model_id)
         return bool(info and info.prompt_price == 0 and info.completion_price == 0)
 
     def cost_usd(self, model_id: str, prompt_tokens: int, completion_tokens: int) -> float:
+        """Compute the cost of one call in USD from catalog prices."""
         info = self._models.get(model_id)
         if not info:
             return 0.0
@@ -87,7 +86,7 @@ class ModelCatalog:
         )
 
     def closest(self, model_id: str, n: int = 3) -> list[str]:
-        """Похожие существующие ID — для отладки роутинга."""
+        """Return similar existing model ids, useful for debugging routing."""
         if not self._models:
             return []
         return difflib.get_close_matches(model_id, list(self._models), n=n, cutoff=0.45)

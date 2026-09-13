@@ -1,7 +1,8 @@
-"""Хелперы Telegram: разбивка длинных текстов, md→HTML, стриминг ответа."""
+"""Telegram helpers: long-text splitting, markdown-to-HTML, answer streaming."""
 from __future__ import annotations
 
 import html
+import logging
 import re
 import time
 from typing import AsyncIterator
@@ -9,12 +10,14 @@ from typing import AsyncIterator
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
 
+log = logging.getLogger(__name__)
+
 TG_LIMIT = 4096
-SPLIT_LIMIT = 3900  # с запасом на разметку
+SPLIT_LIMIT = 3900
 
 
 def split_text(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
-    """Режет длинный текст на куски ≤ limit по границам абзацев/предложений."""
+    """Split long text into chunks under the limit on paragraph/sentence borders."""
     text = text.strip()
     if len(text) <= limit:
         return [text] if text else []
@@ -34,11 +37,11 @@ def split_text(text: str, limit: int = SPLIT_LIMIT) -> list[str]:
 
 
 def md_to_html(text: str) -> str:
-    """Мини-конвертер markdown → Telegram HTML (без внешних зависимостей)."""
-    # блоки кода сначала, плейсхолдеры
+    """Convert simple markdown to Telegram HTML without external dependencies."""
     code_blocks: list[str] = []
 
     def _stash(m: re.Match) -> str:
+        """Replace a code block with a placeholder to protect it from escaping."""
         code_blocks.append(m.group(1))
         return f"\x00CB{len(code_blocks) - 1}\x00"
 
@@ -51,14 +54,14 @@ def md_to_html(text: str) -> str:
     text = re.sub(r"^[-*]\s+", "• ", text, flags=re.M)
 
     def _unstash(m: re.Match) -> str:
+        """Restore a stashed code block as an HTML <pre> element."""
         return "<pre>" + html.escape(code_blocks[int(m.group(1))]) + "</pre>"
 
     return re.sub(r"\x00CB(\d+)\x00", _unstash, text)
 
 
 class StreamEditor:
-    """Стримит LLM-поток в одно сообщение TG: edit не чаще ~1 раза в 1.2с
-    и не меньше чем на 80 символов. Финал — с HTML-разметкой и разбиением."""
+    """Stream an LLM response into one Telegram message with throttled edits."""
 
     def __init__(self, bot: Bot, chat_id: int) -> None:
         self.bot = bot
@@ -68,10 +71,12 @@ class StreamEditor:
         self._last_len = 0
 
     async def start(self, placeholder: str = "🤔 Думаю…") -> None:
+        """Send the placeholder message that will be edited while streaming."""
         msg = await self.bot.send_message(self.chat_id, placeholder)
         self.message_id = msg.message_id
 
     async def _edit(self, text: str) -> None:
+        """Edit the streaming message, falling back to a new one if uneditable."""
         if not self.message_id:
             return
         try:
@@ -85,14 +90,14 @@ class StreamEditor:
                 msg = await self.bot.send_message(self.chat_id, text)
                 self.message_id = msg.message_id
             else:
-                log = __import__("logging").getLogger(__name__)
                 log.debug("edit_message_text: %s", e)
 
     async def push(self, full_text: str) -> None:
+        """Edit the message with the accumulated text if the throttle allows."""
         now = time.monotonic()
         if len(full_text) - self._last_len < 80 and now - self._last_edit < 1.2:
             return
-        if now - self._last_edit < 0.3:  # жёсткий пол
+        if now - self._last_edit < 0.3:
             return
         self._last_edit = now
         self._last_len = len(full_text)
@@ -100,14 +105,13 @@ class StreamEditor:
         await self._edit(shown or "…")
 
     async def finish(self, full_text: str) -> None:
-        """Финальный текст с разметкой; хвост — отдельными сообщениями."""
+        """Set the final formatted text, sending the overflow as new messages."""
         if not full_text.strip():
             full_text = "(пустой ответ модели)"
         formatted = md_to_html(full_text)
         chunks = split_text(formatted) or ["(пусто)"]
         await self._edit(chunks[0][:TG_LIMIT - 1] + "…"
                          if len(chunks) > 1 else chunks[0])
-        # если отформатированный кусок всё равно длиннее лимита — режем ещё раз
         first = chunks[0]
         while len(first) > TG_LIMIT:
             await self.bot.send_message(self.chat_id, first[TG_LIMIT:])
@@ -125,7 +129,7 @@ async def stream_to_telegram(
     deltas: AsyncIterator[str],
     placeholder: str = "🤔 Думаю…",
 ) -> str:
-    """Собирает весь текст из потока дельт, параллельно показывая его юзеру."""
+    """Collect a full answer from a delta stream while showing it to the user."""
     editor = StreamEditor(bot, chat_id)
     await editor.start(placeholder)
     parts: list[str] = []

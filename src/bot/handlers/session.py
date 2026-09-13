@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, StateFilter
@@ -143,6 +144,10 @@ async def subjects_done(
     )
     await state.set_state(SessionFSM.collecting)
     await state.update_data(session_id=session_id)
+    log.info(
+        "homework session created: id=%d user=%s subjects=%s",
+        session_id, callback.from_user.id, selected,
+    )
     await callback.answer()
     await callback.message.edit_text(COLLECTING_WELCOME)
 
@@ -197,6 +202,10 @@ async def collect_photo(
             "❌ Ничего не разобрал. Попробуй фото получше или напиши номер задания текстом."
         )
         return
+    log.info(
+        "photo recognized: user=%s chars=%d",
+        message.from_user.id, len(ocr_text),
+    )
     data = await state.get_data()
     await services.db.add_message(
         data["session_id"], "user", "photo", ocr_text, {"file_id": photo.file_id}
@@ -276,12 +285,18 @@ async def _make_plan(
 
     await state.set_state(SessionFSM.dialog)
     await state.update_data(busy=True, session_id=session.id)
+    t0 = time.monotonic()
     try:
         plan_text = await stream_to_telegram(
             bot, chat_id, services.llm.chat_stream("brain", llm_messages),
             placeholder="🤔 Разбираю домашку…",
         )
         await services.db.add_message(session.id, "assistant", "plan", plan_text)
+        log.info(
+            "plan built: session=%d items=%d excerpts=%d chars=%d in %.1fs",
+            session.id, len(items), len(excerpts), len(plan_text),
+            time.monotonic() - t0,
+        )
         await bot.send_message(
             chat_id,
             "💬 Теперь просто командуй: «реши 1», «сочинение на тему …», "

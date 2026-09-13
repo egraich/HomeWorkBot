@@ -52,6 +52,7 @@ cd src
 | `ALLOWED_IDS` | `123,456` | ids of allowed users — the bot rejects everyone else |
 | `DEFAULT_MODE` | `econ` | `econ` / `medium` / `max` quality preset |
 | `DAILY_BUDGET_USD` | `3.0` | spend limit per UTC day |
+| `LOG_LEVEL` | `INFO` | log verbosity: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `TG_API_BASE` | `http://tg-bot-api:8081` | optional: a self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) server, removes Telegram's 20 MB file limit |
 
 ## How it works

@@ -1,4 +1,4 @@
-"""Middlewares: whitelist access control and simple anti-flood."""
+"""Middlewares: update logging, whitelist access control and anti-flood."""
 from __future__ import annotations
 
 import logging
@@ -11,6 +11,36 @@ from aiogram.types import CallbackQuery, Message, User
 from bot.config import Config
 
 log = logging.getLogger(__name__)
+
+
+class LoggingMiddleware(BaseMiddleware):
+    """Log every incoming update with the handler name and execution time."""
+
+    async def __call__(
+        self,
+        handler: Callable[[Any, dict[str, Any]], Awaitable[Any]],
+        event: Message | CallbackQuery,
+        data: dict[str, Any],
+    ) -> Any:
+        """Measure the handler run and write one structured line per update."""
+        user: User | None = data.get("event_from_user")
+        handler_name = getattr(data.get("handler"), "__name__", "<no handler>")
+        start = time.monotonic()
+        try:
+            result = await handler(event, data)
+        except Exception:
+            log.error(
+                "handler %s failed after %.2fs (user=%s)",
+                handler_name, time.monotonic() - start, getattr(user, "id", "?"),
+                exc_info=True,
+            )
+            raise
+        log.info(
+            "handled %s by %s in %.2fs (user=%s)",
+            type(event).__name__, handler_name, time.monotonic() - start,
+            getattr(user, "id", "?"),
+        )
+        return result
 
 
 class AuthMiddleware(BaseMiddleware):
@@ -30,7 +60,10 @@ class AuthMiddleware(BaseMiddleware):
         if user is None:
             return await handler(event, data)
         if not self.cfg.is_allowed(user.id):
-            log.info("Stranger: %s (%s)", user.id, user.username)
+            log.warning(
+                "unauthorized access attempt: id=%s username=%s",
+                user.id, user.username,
+            )
             if isinstance(event, CallbackQuery):
                 await event.answer("🔒 Приватный бот.", show_alert=True)
             else:
@@ -56,6 +89,7 @@ class ThrottleMiddleware(BaseMiddleware):
         chat_id = event.chat.id if event.chat else 0
         now = time.monotonic()
         if now - self._last.get(chat_id, 0.0) < self.interval:
+            log.info("throttled message from chat=%s", chat_id)
             return None
         self._last[chat_id] = now
         return await handler(event, data)

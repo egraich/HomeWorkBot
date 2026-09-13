@@ -11,32 +11,29 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramConflictError
 from aiogram.types import BotCommand
 from openai import AsyncOpenAI
 
 from bot.config import Config
 from bot.db.repo import Database
 from bot.handlers import ALL_ROUTERS
-from bot.middlewares import AuthMiddleware, ThrottleMiddleware
+from bot.middlewares import AuthMiddleware, LoggingMiddleware, ThrottleMiddleware
 from bot.services.container import Services
 from bot.services.llm.catalog import ModelCatalog
 from bot.services.llm.client import LLMClient
 from bot.services.llm.router import Router
 from bot.services.llm.usage import Usage
 from bot.services.textbooks import TextbookService
+from bot.utils.logging_setup import setup_logging
 
 log = logging.getLogger("bot")
 
 
 async def main() -> None:
     """Wire all services together and start long polling."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
-    )
-    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
-
     cfg = Config()
+    setup_logging(cfg.log_level)
     cfg.ensure_dirs()
     if not cfg.bot_token:
         sys.exit("BOT_TOKEN пуст — заполни .env (как получить токен — в README)")
@@ -76,6 +73,8 @@ async def main() -> None:
     )
     dp = Dispatcher()
     dp["services"] = services
+    dp.message.middleware(LoggingMiddleware())
+    dp.callback_query.middleware(LoggingMiddleware())
     dp.message.middleware(AuthMiddleware(cfg))
     dp.callback_query.middleware(AuthMiddleware(cfg))
     dp.message.middleware(ThrottleMiddleware())
@@ -95,14 +94,22 @@ async def main() -> None:
 
     mode = await services.llm.current_mode()
     log.info(
-        "Стартую. Режим: %s | админов: %d | whitelist: %d | моделей в каталоге: %d",
-        mode, len(cfg.admin_id_list), len(cfg.allowed_id_list), len(catalog._models),
+        "Starting: mode=%s admins=%d whitelist=%d catalog_models=%d log_level=%s",
+        mode, len(cfg.admin_id_list), len(cfg.allowed_id_list),
+        len(catalog._models), cfg.log_level,
     )
     try:
         await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
+    except TelegramConflictError:
+        log.error(
+            "TelegramConflictError: another bot instance is polling with this "
+            "token. Stop the other instance (check your own machine too) and "
+            "restart the container."
+        )
+        raise SystemExit(1)
     finally:
         await db.close()
-        log.info("Остановлен")
+        log.info("Stopped")
 
 
 if __name__ == "__main__":

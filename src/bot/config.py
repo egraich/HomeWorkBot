@@ -41,7 +41,18 @@ class Config(BaseSettings):
     budget_warn: float = 0.8
     budget_block: float = 0.95
 
+    log_level: str = "INFO"
+
     data_dir: Path = Path("data")
+
+    @field_validator("log_level")
+    @classmethod
+    def _check_log_level(cls, v: str) -> str:
+        """Normalize the log level and validate it."""
+        v = v.strip().upper()
+        if v not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            raise ValueError("LOG_LEVEL must be DEBUG, INFO, WARNING, ERROR or CRITICAL")
+        return v
 
     @field_validator("tg_api_base", mode="after")
     @classmethod

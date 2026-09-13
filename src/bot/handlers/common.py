@@ -1,6 +1,8 @@
 """Common handlers: /start, main menu, help, cancel."""
 from __future__ import annotations
 
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
@@ -11,6 +13,7 @@ from bot.services.container import Services
 from bot.states import SessionFSM
 
 router = Router(name="common")
+log = logging.getLogger(__name__)
 
 HELP_TEXT = (
     "<b>HomeWorkBot</b> — собирает домашку на завтра и помогает её сделать.\n\n"
@@ -44,6 +47,7 @@ async def cmd_start(message: Message, state: FSMContext, services: Services) -> 
     await services.db.upsert_user(
         user.id, user.username, user.full_name, services.cfg.is_admin(user.id)
     )
+    log.info("user started the bot: id=%s username=%s", user.id, user.username)
     classes = await services.db.list_classes()
     if not classes:
         if services.cfg.is_admin(user.id):

@@ -101,6 +101,7 @@ async def adm_mode_set(
         await callback.answer("Неизвестный режим")
         return
     await services.db.set_setting("quality_mode", mode)
+    log.info("quality mode set to %s by admin=%s", mode, callback.from_user.id)
     await callback.answer(f"Режим: {MODE_TITLES[mode]}")
     await callback.message.edit_reply_markup(reply_markup=modes_kb(mode))
 
@@ -354,6 +355,7 @@ async def adm_class_add_text(
     """Create a class from the admin's message."""
     name = (message.text or "").strip()[:32]
     await services.db.add_class(name)
+    log.info("class added: %s by admin=%s", name, message.from_user.id)
     await state.clear()
     classes = await services.db.list_classes()
     await message.answer(
@@ -403,6 +405,10 @@ async def adm_subject_add_text(
     data = await state.get_data()
     class_id = data["class_id"]
     await services.db.add_subject(class_id, name)
+    log.info(
+        "subject added: %s (class_id=%s) by admin=%s",
+        name, class_id, message.from_user.id,
+    )
     await state.clear()
     subjects = await services.db.list_subjects(class_id)
     await message.answer(
@@ -421,6 +427,10 @@ async def adm_subject_del(
     subject_id = int(callback.data.split(":")[3])
     subject = await services.db.get_subject(subject_id)
     await services.db.delete_subject(subject_id)
+    log.info(
+        "subject deleted: %s (id=%s) by admin=%s",
+        subject["name"] if subject else "?", subject_id, callback.from_user.id,
+    )
     await callback.answer(f"Удалил: {subject['name'] if subject else ''}")
     if subject:
         subjects = await services.db.list_subjects(subject["class_id"])

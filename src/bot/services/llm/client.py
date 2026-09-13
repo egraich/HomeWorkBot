@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -88,6 +89,7 @@ class LLMClient:
                 continue
             budget_blocked = False
             extra = self.router.extra_for(mode, task, model_id)
+            t0 = time.monotonic()
             try:
                 resp = await self._client.chat.completions.create(
                     model=model_id,
@@ -117,6 +119,10 @@ class LLMClient:
                 log.warning("Model %s returned empty content, trying next", model_id)
                 continue
             cost = self.catalog.cost_usd(model_id, pt, ct)
+            log.info(
+                "llm call ok: task=%s model=%s in %.1fs tokens=%d+%d cost=$%.5f",
+                task, model_id, time.monotonic() - t0, pt, ct, cost,
+            )
             return LLMResult(text=text, model=model_id, prompt_tokens=pt,
                              completion_tokens=ct, cost_usd=cost)
         if budget_blocked:
@@ -172,6 +178,7 @@ class LLMClient:
 
             collected: list[str] = []
             pt = ct = 0
+            t0 = time.monotonic()
             try:
                 async for chunk in stream:
                     if getattr(chunk, "usage", None):
@@ -192,6 +199,11 @@ class LLMClient:
             pt = pt or pt_est
             ct = ct or max(1, sum(map(len, collected)) // 4)
             await self.usage.record(model_id, task, pt, ct)
+            log.info(
+                "llm stream ok: task=%s model=%s in %.1fs tokens=%d+%d cost=$%.5f",
+                task, model_id, time.monotonic() - t0, pt, ct,
+                self.catalog.cost_usd(model_id, pt, ct),
+            )
             return
         if budget_blocked:
             raise BudgetExceeded(

@@ -9,6 +9,7 @@ import httpx
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
 from aiogram.types import BotCommand
 from openai import AsyncOpenAI
@@ -63,10 +64,14 @@ async def main() -> None:
         llm=llm, textbooks=textbooks,
     )
 
-    tg_session = AiohttpSession(api_base=cfg.tg_api_base) if cfg.tg_api_base else None
+    tg_session = None
+    if cfg.tg_api_base:
+        tg_session = AiohttpSession(
+            api=TelegramAPIServer.from_base(cfg.tg_api_base)
+        )
     bot = Bot(
         cfg.bot_token,
-        session=tg_session,  # type: ignore[arg-type]
+        session=tg_session,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher()

@@ -52,10 +52,10 @@ async def textbook_excerpts(
 def trim_history(history: list[dict], max_chars: int = MAX_DIALOG_CHARS) -> list[dict]:
     """Trim dialog history to max_chars from the end, keeping user-first pairs."""
     total = 0
-    cut = len(history)
+    cut = 0
     for i in range(len(history) - 1, -1, -1):
         total += len(history[i]["content"])
-        if total > max_chars and i > 0:
+        if total > max_chars:
             cut = i + 1
             break
     trimmed = history[cut:]

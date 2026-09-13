@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from bot.db.repo import Database, SessionInfo
-from bot.services.planner import textbook_excerpts
+from bot.services.planner import textbook_excerpts, trim_history
 from bot.services.textbooks import extract_references
 
 
@@ -51,3 +51,14 @@ def test_excerpts_use_textbook_ids_not_subject_ids(tmp_path: Path, db: Database)
         assert excerpts and excerpts[0]["page_no"] == 143
 
     asyncio.run(run())
+
+
+def test_trim_history_keeps_short_conversations():
+    """A history that fits the limit must not be trimmed to nothing."""
+    history = [
+        {"role": "user", "kind": "text", "content": "упражнение 1.43"},
+        {"role": "assistant", "kind": "plan", "content": "план с условием: упростите выражение"},
+        {"role": "user", "kind": "text", "content": "реши 1"},
+    ]
+    trimmed = trim_history(history)
+    assert trimmed == history

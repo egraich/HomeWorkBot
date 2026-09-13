@@ -169,6 +169,7 @@ def build_dialog_messages(
     history: list[dict],
     excerpts: list[dict],
     extra_image: bytes | None = None,
+    page_images: list[tuple[int, bytes]] | None = None,
 ) -> list[dict]:
     """Build the dialog request from trimmed history and textbook excerpts."""
     messages: list[dict] = [
@@ -188,7 +189,24 @@ def build_dialog_messages(
         ctx = "\n\n".join(
             f"Страница {e['page_no']} учебника:\n{e['text'][:1200]}" for e in excerpts
         )
-        messages.append({"role": "system", "content": f"Релевантные фрагменты учебника:\n{ctx}"})
+        messages.append(
+            {
+                "role": "system",
+                "content": "Релевантные фрагменты учебника (текстовый слой может быть "
+                "искажён — приложенные изображения страниц надёжнее):\n" + ctx,
+            }
+        )
+    if page_images:
+        for page_no, image in page_images:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Страница {page_no} учебника:"},
+                        _image_part(image),
+                    ],
+                }
+            )
     if extra_image:
         messages.append(
             {

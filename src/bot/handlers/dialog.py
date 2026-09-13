@@ -46,9 +46,23 @@ async def _run_brain(
     """Answer a dialog message with the brain model, streaming to Telegram."""
     history = await services.db.list_messages(session.id, limit=24)
     excerpts = await textbook_excerpts(services.db, session, [text])
+
+    # vision-capable brains get the actual page images: formula text layers
+    # of textbooks are often too mangled to read
+    page_images: list[tuple[int, bytes]] = []
+    if excerpts and services.router.primary_vision(
+        await services.llm.current_mode(), "brain"
+    ):
+        for e in excerpts[:2]:
+            row = await services.db.get_textbook(e["textbook_id"])
+            if row:
+                image = await services.textbooks.render_page(row["filename"], e["page_no"])
+                if image:
+                    page_images.append((e["page_no"], image))
+
     llm_messages = build_dialog_messages(
         class_name, subject_names, trim_history(history), excerpts,
-        extra_image=image_bytes,
+        extra_image=image_bytes, page_images=page_images or None,
     )
     answer = await stream_to_telegram(
         bot, message.chat.id, services.llm.chat_stream("brain", llm_messages),

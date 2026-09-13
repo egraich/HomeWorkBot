@@ -19,13 +19,13 @@ The bot only makes outbound connections (Telegram long polling + the AI API), so
 
 ## Features
 
-- 🎧 **Listening mode** — dump homework as text, forwarded messages or photos; images are OCR'd (handwriting and blackboards, Russian included) and acknowledged with a short receipt
-- 📋 **Smart planning** — one command turns everything collected into "what I understood" plus a structured per-task plan with difficulty ratings
-- 📖 **Textbook search** — PDFs are indexed per page (FTS5); scanned pages go through vision OCR; write "упражнение 214" and the bot pulls the right pages into context
-- 🧠 **Model routing** — every task type (OCR, reasoning, essay writing, receipts) gets its own model per quality mode (econ / medium / max), with automatic fallbacks when a model fails
-- ✍️ **Human-sounding essays** — a two-stage pipeline: the brain drafts the content, a writer model rewrites it with an anti-AI-cliché prompt (sentence-length variance, banned stock phrases, no lists)
-- 💰 **Budget guard** — tracks every call in USD against the daily limit, warns at 80% and blocks paid models at 95% (free-model receipts keep working)
-- 🛠 **Admin panel in chat** — switch quality modes, check today's spend per role, upload and index textbooks, manage classes and subjects
+- **Listening mode** — dump homework as text, forwarded messages or photos; images are OCR'd (handwriting and blackboards, Russian included) and acknowledged with a short receipt
+- **Smart planning** — one command turns everything collected into "what I understood" plus a structured per-task plan with difficulty ratings
+- **Textbook search** — PDFs are indexed per page (FTS5); scanned pages go through vision OCR; write "упражнение 214" and the bot pulls the right pages into context
+- **Model routing** — every task type (OCR, reasoning, essay writing, receipts) gets its own model per quality mode (econ / medium / max), with automatic fallbacks when a model fails
+- **Human-sounding essays** — a two-stage pipeline: the brain drafts the content, a writer model rewrites it with an anti-AI-cliché prompt (sentence-length variance, banned stock phrases, no lists)
+- **Budget guard** — tracks every call in USD against the daily limit, warns at 80% and blocks paid models at 95% (free-model receipts keep working)
+- **Admin panel in chat** — switch quality modes, check today's spend per role, upload and index textbooks, manage classes and subjects
 
 ## Running locally
 

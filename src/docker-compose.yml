@@ -1,12 +1,16 @@
+name: homewbot_proj
+
 services:
-  bot:
-    build: .
+  homewbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: homewbot
     restart: unless-stopped
-    env_file: .env
+    env_file:
+      - ../.env
     volumes:
-      # данные (SQLite + учебники) живут на уровень выше src — как у соседних
-      # ботов их *.db лежат рядом с src; переживают редеплой и git pull
+      # SQLite + учебники живут на уровень выше src — как *.db соседних ботов
       - ../data:/app/data
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('https://api.telegram.org', timeout=10)\""]
@@ -14,18 +18,16 @@ services:
       timeout: 15s
       retries: 3
       start_period: 30s
-
-  # ── Свой Telegram Bot API сервер (у тебя уже есть: ~/projects/bots/tgapibot) ──
-  # Чтобы снять лимит 20 МБ и передавать книги через Telegram:
-  # 1) В .env поставь TG_API_BASE=http://tg-bot-api:8080
-  # 2) Узнай docker-сеть контейнера tgapibot:
-  #    docker inspect -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}' tgapibot
-  # 3) Раскомментируй ниже, подставив это имя сети:
-  #
-  # networks:
-  #   default:
-  #   tgnet:
-  #     external: true
-  #     name: <имя-сети-tgapibot>
-  #
-  # 4) И допиши сервису bot:  networks: [default, tgnet]
+    # ── Свой Telegram Bot API сервер (у тебя уже есть: ~/projects/bots/tgapibot) ──
+    # Снимает лимит 20 МБ. Порядок:
+    # 1) узнай сеть tgapibot: docker inspect -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}' tgapibot
+    # 2) раскомментируй networks ниже, подставив имя, и допиши сервису homewbot:
+    #    networks: [default, tgnet]
+    # 3) в ../.env поставь TG_API_BASE=http://tg-bot-api:8080 (имя хоста — как
+    #    контейнер tgapibot виден в этой сети)
+    #
+    # networks:
+    #   default:
+    #   tgnet:
+    #     external: true
+    #     name: <имя-сети-tgapibot>

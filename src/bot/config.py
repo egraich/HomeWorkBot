@@ -20,8 +20,10 @@ def _parse_ids(raw: str | None) -> list[int]:
 
 
 class Config(BaseSettings):
+    # .env ищем и в CWD, и на уровень выше: на проде он лежит в bots/homewbot/,
+    # рядом с src (как у соседних ботов)
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=(".env", "../.env"), env_file_encoding="utf-8", extra="ignore"
     )
 
     # Telegram

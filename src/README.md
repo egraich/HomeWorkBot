@@ -48,12 +48,13 @@
 ## Быстрый старт (локально)
 
 ```bash
-python -m venv .venv                              # из корня репо
-.venv\Scripts\pip install -r src/requirements.txt
+python -m venv .venv
+copy src\.env.example .env        # .env — на уровне папки бота, рядом с src (как на проде)
+# ... заполни .env (см. таблицу ниже) ...
+.venv\Scripts\pip install -r src\requirements.txt
 cd src
-copy .env.example .env                            # и заполни .env (ниже)
-..\.venv\Scripts\python scripts\smoke_test.py     # проверка API и моделей
-..\.venv\Scripts\python -m bot                    # запуск бота
+..\.venv\Scripts\python scripts\smoke_test.py   # проверка API и моделей
+..\.venv\Scripts\python -m bot                  # запуск бота
 ```
 
 ## Деплой на VPS
@@ -63,16 +64,22 @@ copy .env.example .env                            # и заполни .env (ни
 ```bash
 cd ~/projects/bots
 git clone <твой-репо> homewbot
-cd homewbot/src
-cp .env.example .env && nano .env
-mkdir -p ../data && chown 1000:1000 ../data   # контейнер работает под uid 1000
-docker compose up -d --build
-docker compose logs -f bot
+cd homewbot
+cp src/.env.example .env && nano .env   # .env на уровне homewbot/, как у voicebot
+mkdir -p data
+cd src && docker compose up -d --build
+docker compose logs -f homewbot
 ```
 
-Либо единым скриптом в стиле `ups/`: скопируй `deploy/up-homewbot.sh` из репо в
-`~/projects/ups/scripts/` — дальше `up-homewbot.sh` делает `git pull` + пересборку
-(если у тебя `ups/hooks.json` дергает апнеймы по вебхуку — добавь туда такую же строку).
+Редеплой через webhook-стек `~/projects/ups` (как у остальных ботов):
+
+1. `cp ~/projects/bots/homewbot/deploy/up-homewbot.sh ~/projects/ups/scripts/ && chmod +x ~/projects/ups/scripts/up-homewbot.sh`
+2. Добавь блок `up-homewbot` из `deploy/hooks.json` в `/root/projects/ups/hooks.json`
+   (webhook пересчитывает hooks сам, `-hotreload`).
+3. Дальше деплой = один curl после пуша в гит:
+   ```bash
+   curl "http://<vps>:9000/hooks/up-homewbot?token=HOMEWBOT_TOKEN"
+   ```
 
 Проверка: `docker compose ps` — контейнер `homewbot`, статус healthy.
 
@@ -112,9 +119,9 @@ Bot API в 20 МБ — книги можно будет передавать п�
 1. Узнай docker-сеть tgapibot:
    `docker inspect -f '{{range $k,$_ := .NetworkSettings.Networks}}{{$k}} {{end}}' tgapibot`
 2. В `src/docker-compose.yml` раскомментируй блок `networks` с этим именем и допиши
-   сервису `bot` подключение к ней (шаблон уже там).
-3. В `.env` поставь `TG_API_BASE=http://tg-bot-api:8080` (имя хоста — как контейнер
-   tgapibot виден в этой сети; проверь `docker exec`-ом/по compose-конфигу).
+   сервису `homewbot` подключение к ней (шаблон уже там).
+3. В `homewbot/.env` поставь `TG_API_BASE=http://tg-bot-api:8080` (имя хоста — как
+   контейнер tgapibot виден в этой сети; проверь по compose-конфигу tgapibot).
 4. `docker compose up -d` — код бота менять не нужно, `TG_API_BASE` подхватывается на лету.
 
 Если tgapibot публикует порт на хосте — ещё проще: `TG_API_BASE=http://<ip-vps>:<порт>`.
@@ -131,12 +138,14 @@ Bot API в 20 МБ — книги можно будет передавать п�
 ```
 homewbot/                  # = корень этого репо
 ├── deploy/
-│   └── up-homewbot.sh     # скрипт деплоя в стиле projects/ups/scripts/
+│   ├── up-homewbot.sh     # → скопировать в ~/projects/ups/scripts/
+│   └── hooks.json         # блок up-homewbot → добавить в ~/projects/ups/hooks.json
+├── .env                   # секреты (не в гите), на уровне бота — как у соседних
 ├── LICENSE
 ├── .gitignore
 └── src/                   # == контекст сборки Docker
     ├── Dockerfile  docker-compose.yml  .dockerignore
-    ├── .env / .env.example
+    ├── .env.example
     ├── requirements.txt  requirements-dev.txt
     ├── bot/
     │   ├── __main__.py    # точка входа (python -m bot)

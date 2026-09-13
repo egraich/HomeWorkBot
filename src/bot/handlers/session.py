@@ -188,7 +188,11 @@ async def collect_photo(
     """OCR a photo attachment and store the recognized text."""
     status = await message.answer("📸 Распознаю…")
     photo = message.photo[-1]
-    buf = await bot.download(photo)
+    try:
+        buf = await bot.download(photo)
+    except Exception as e:  # noqa: BLE001
+        await status.edit_text(f"❌ Не смог скачать фото: <code>{e}</code>")
+        return
     if buf is None:
         await status.edit_text("❌ Не смог скачать фото")
         return
@@ -227,7 +231,11 @@ async def collect_document(
     mime = doc.mime_type or ""
     if mime.startswith("image/"):
         status = await message.answer("📸 Распознаю…")
-        buf = await bot.download(doc)
+        try:
+            buf = await bot.download(doc)
+        except Exception as e:  # noqa: BLE001
+            await status.edit_text(f"❌ Не смог скачать файл: <code>{e}</code>")
+            return
         if buf is None:
             await status.edit_text("❌ Не смог скачать файл")
             return

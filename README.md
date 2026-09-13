@@ -83,6 +83,14 @@ A self-hosted [telegram-bot-api](https://github.com/AIPOW/telegram-bot-api) remo
 curl "https://api.telegram.org/bot<BOT_TOKEN>/logOut"
 ```
 
+Run the server in local mode (`TELEGRAM_LOCAL=1`) and mount its data directory into the bot's container **at the same path** — in local mode the server returns absolute file paths, so the bot reads files from disk instead of HTTP:
+
+```yaml
+    volumes:
+      - ../data:/app/data
+      - /path/to/telegram-bot-api-data:/var/lib/telegram-bot-api:ro
+```
+
 ## Textbooks
 
 Two ways to add a book: send the PDF to the bot (`/admin` → Books → Upload via Telegram, then pick a subject), or drop the file into `data/textbooks/` and bind it in the same menu. Ingestion extracts text page-by-page, OCRs scans, and reports progress in chat.

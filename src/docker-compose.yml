@@ -23,4 +23,9 @@ services:
   # Optional: to route Telegram traffic through your own telegram-bot-api
   # server (removes the 20 MB file limit), put this service and your
   # telegram-bot-api container on a shared Docker network and set
-  # TG_API_BASE in ../.env to its address, e.g. http://tg-bot-api:8080
+  # TG_API_BASE in ../.env to its address, e.g. http://tg-bot-api:8081
+  #
+  # If that server runs in local mode (TELEGRAM_LOCAL=1), the bot reads
+  # files from its data directory directly, so mount it at the same path:
+  #     volumes:
+  #       - /path/to/telegram-bot-api-data:/var/lib/telegram-bot-api:ro

@@ -63,8 +63,12 @@ async def main() -> None:
 
     tg_session = None
     if cfg.tg_api_base:
+        # Local Bot API servers (TELEGRAM_LOCAL=1) return absolute file paths
+        # inside their own container; is_local=True makes aiogram read files
+        # from disk instead of HTTP. The data dir must therefore be mounted
+        # into this container at the same path (see docker-compose.yml).
         tg_session = AiohttpSession(
-            api=TelegramAPIServer.from_base(cfg.tg_api_base)
+            api=TelegramAPIServer.from_base(cfg.tg_api_base, is_local=True)
         )
     bot = Bot(
         cfg.bot_token,

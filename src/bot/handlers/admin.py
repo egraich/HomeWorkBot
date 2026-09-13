@@ -41,7 +41,7 @@ async def _show_admin_menu(target: Message | CallbackQuery, services: Services) 
     text = (
         "🛠 <b>Админка</b>\n"
         f"Режим качества: <b>{MODE_TITLES[mode]}</b>\n"
-        "Книги кладутся по SSH в <code>data/textbooks/</code>."
+        "Книги: загрузка через ТГ или файлы в <code>data/textbooks/</code> (SSH)."
     )
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=admin_menu())
@@ -151,6 +151,22 @@ async def adm_books(
     )
 
 
+@router.callback_query(F.data == "adm:book:upload")
+async def adm_book_upload(
+    callback: CallbackQuery, state: FSMContext, services: Services
+) -> None:
+    """Ask the admin to send a PDF document for upload."""
+    if not _is_admin(services, callback.from_user.id):
+        return
+    await callback.answer()
+    await state.set_state(AdminFSM.uploading_book)
+    await callback.message.edit_text(
+        "📥 Пришли учебник <b>документом</b> (PDF-файлом).\n"
+        "Лимит: 20 МБ через официальный API, без лимита — через свой Bot API сервер.\n"
+        "/отмена — выйти."
+    )
+
+
 @router.callback_query(F.data.startswith("adm:book:"))
 async def adm_book_pick(
     callback: CallbackQuery, state: FSMContext, services: Services
@@ -189,22 +205,6 @@ async def adm_book_pick(
     await callback.message.edit_text(
         f"Книга: <b>{Path(path).name}</b>\nК какому предмету привязать?",
         reply_markup=bind_subject_kb(subjects),
-    )
-
-
-@router.callback_query(F.data == "adm:book:upload")
-async def adm_book_upload(
-    callback: CallbackQuery, state: FSMContext, services: Services
-) -> None:
-    """Ask the admin to send a PDF document for upload."""
-    if not _is_admin(services, callback.from_user.id):
-        return
-    await callback.answer()
-    await state.set_state(AdminFSM.uploading_book)
-    await callback.message.edit_text(
-        "📥 Пришли учебник <b>документом</b> (PDF-файлом).\n"
-        "Лимит: 20 МБ через официальный API, без лимита — через свой Bot API сервер.\n"
-        "/отмена — выйти."
     )
 
 

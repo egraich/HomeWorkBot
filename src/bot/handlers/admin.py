@@ -202,7 +202,7 @@ async def adm_book_upload(
     await state.set_state(AdminFSM.uploading_book)
     await callback.message.edit_text(
         "📥 Пришли учебник <b>документом</b> (PDF-файлом).\n"
-        "Лимит: 20 МБ через официальный API, без лимита — через tgapibot.\n"
+        "Лимит: 20 МБ через официальный API, без лимита — через свой Bot API сервер.\n"
         "/отмена — выйти."
     )
 
@@ -228,7 +228,7 @@ async def adm_book_upload_doc(
     except TelegramEntityTooLarge:
         await status.edit_text(
             "❌ Файл больше 20 МБ — официальный Telegram API больше не отдаст. "
-            "Включи tgapibot (TG_API_BASE в .env) или грузи по SSH."
+            "Настрой свой Bot API сервер (TG_API_BASE в .env) или грузи по SSH."
         )
         return
     except Exception as e:  # noqa: BLE001

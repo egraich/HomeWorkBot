@@ -98,7 +98,7 @@ async def _show_admin_menu(target: Message | CallbackQuery, services: Services) 
         await target.answer(text, reply_markup=admin_menu())
 
 
-@router.message(Command("admin", "админ"))
+@router.message(Command("admin"))
 async def cmd_admin(
     message: Message, state: FSMContext, services: Services
 ) -> None:
@@ -212,7 +212,7 @@ async def adm_book_upload(
     await callback.message.edit_text(
         "📥 Пришли учебник <b>документом</b> (PDF-файлом).\n"
         "Лимит: 20 МБ через официальный API, без лимита — через свой Bot API сервер.\n"
-        "/отмена — выйти."
+        "/cancel — выйти."
     )
 
 
@@ -322,7 +322,7 @@ async def adm_book_upload_doc(
 @router.message(AdminFSM.uploading_book)
 async def adm_book_upload_wrong(message: Message) -> None:
     """Remind the admin that only a PDF document is expected."""
-    await message.answer("❌ Жду PDF-документ (именно файл, не фото и не текст). /отмена — выйти.")
+    await message.answer("❌ Жду PDF-документ (именно файл, не фото и не текст). /cancel — выйти.")
 
 
 @router.callback_query(AdminFSM.binding_book, F.data.startswith("adm:bind:"))

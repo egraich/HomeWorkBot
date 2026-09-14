@@ -19,10 +19,10 @@ HELP_TEXT = (
     "<b>HomeWorkBot</b> — собирает домашку на завтра и помогает её сделать.\n\n"
     "1️⃣ «Домашка на завтра» → выбери предметы\n"
     "2️⃣ Кидай задания: текст, пересылки, фото с доски/учебника\n"
-    "3️⃣ <b>/план</b> — бот разберёт всё и составит план\n"
+    "3️⃣ <b>/plan</b> — бот разберёт всё и составит план\n"
     "4️⃣ Дальше командуй: «реши 2», «сочинение на тему…», спрашивай что угодно\n"
-    "5️⃣ <b>/стоп</b> — завершить, <b>/сброс</b> — начать заново\n\n"
-    "Команды: /план · /стоп · /сброс · /стиль · /help"
+    "5️⃣ <b>/stop</b> — завершить, <b>/reset</b> — начать заново\n\n"
+    "Команды: /plan · /stop · /reset · /style · /help"
 )
 
 
@@ -70,7 +70,7 @@ async def cmd_start(message: Message, state: FSMContext, services: Services) -> 
     await show_menu(message, services, user.id)
 
 
-@router.message(Command("help", "помощь"))
+@router.message(Command("help"))
 async def cmd_help(message: Message) -> None:
     """Send the help text."""
     await message.answer(HELP_TEXT)
@@ -93,7 +93,7 @@ async def cb_menu(
     await show_menu(callback, services, callback.from_user.id)
 
 
-@router.message(Command("cancel", "отмена"))
+@router.message(Command("cancel"))
 async def cmd_cancel(
     message: Message, state: FSMContext, services: Services
 ) -> None:

@@ -27,7 +27,7 @@ COLLECTING_WELCOME = (
     "Накидывай всё по домашке: текст, пересылки сообщений, фото упражнений и "
     "доски. Если задание из учебника — лучше просто напиши номер, я найду "
     "страницы сам.\n\n"
-    "Когда всё скинул — жми <b>«Составить план»</b> или /план."
+    "Когда всё скинул — жми <b>«Составить план»</b> или /plan."
 )
 
 
@@ -347,7 +347,7 @@ async def cb_plan(
     await _make_plan(callback, state, services, bot)
 
 
-@router.message(StateFilter(SessionFSM.collecting), Command("план", "plan"))
+@router.message(StateFilter(SessionFSM.collecting), Command("plan"))
 async def cmd_plan(
     message: Message, state: FSMContext, services: Services, bot: Bot
 ) -> None:
@@ -369,13 +369,13 @@ async def _end_session(
     await show_menu(message, services, message.from_user.id)
 
 
-@router.message(Command("стоп", "stop"))
+@router.message(Command("stop"))
 async def cmd_stop(message: Message, state: FSMContext, services: Services) -> None:
     """Finish the active session."""
     await _end_session(message, state, services, "done", "⏹ Сессия завершена. Удачи с домашкой!")
 
 
-@router.message(Command("сброс", "reset"))
+@router.message(Command("reset"))
 async def cmd_reset(message: Message, state: FSMContext, services: Services) -> None:
     """Cancel the active session and forget collected materials."""
     await _end_session(message, state, services, "cancelled", "♻️ Сессия сброшена, накопленное забыто.")

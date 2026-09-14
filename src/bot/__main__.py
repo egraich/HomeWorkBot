@@ -108,9 +108,10 @@ async def main() -> None:
         [
             BotCommand(command="start", description="Меню"),
             BotCommand(command="plan", description="Составить план домашки"),
+            BotCommand(command="style", description="Стиль сочинений"),
             BotCommand(command="stop", description="Завершить сессию"),
             BotCommand(command="reset", description="Сбросить сессию"),
-            BotCommand(command="style", description="Стиль сочинений"),
+            BotCommand(command="cancel", description="Отменить действие и выйти в меню"),
             BotCommand(command="admin", description="Админ-панель"),
             BotCommand(command="help", description="Помощь"),
         ]

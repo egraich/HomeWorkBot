@@ -198,7 +198,7 @@ async def toggle_style(
     await callback.message.edit_reply_markup(reply_markup=dialog_kb(new_style))
 
 
-@router.message(StateFilter(SessionFSM.dialog), Command("стиль", "style"))
+@router.message(StateFilter(SessionFSM.dialog), Command("style"))
 async def cmd_style(
     message: Message, state: FSMContext, services: Services
 ) -> None:
@@ -217,10 +217,10 @@ async def cmd_style(
     )
 
 
-@router.message(StateFilter(SessionFSM.dialog), Command("план", "plan"))
+@router.message(StateFilter(SessionFSM.dialog), Command("plan"))
 async def cmd_plan_in_dialog(message: Message) -> None:
     """Explain that the plan already exists when /plan is typed in dialog."""
     await message.answer(
         "📋 План уже составлен — он выше. Командуй задачей по номеру, "
-        "или /сброс чтобы собрать новую домашку."
+        "или /reset чтобы собрать новую домашку."
     )

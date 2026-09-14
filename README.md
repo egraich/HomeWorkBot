@@ -19,13 +19,13 @@ The bot only makes outbound connections (Telegram long polling + the AI API), so
 
 ## Features
 
-- 🎧 **Listening mode** — dump homework as text, forwards or photos; images are OCR'd (handwriting and blackboards, Russian included) and acknowledged with a short receipt
-- 🧠 **Understands what you mean, not just what you type** — an intent-extraction model reads each message together with the session context: "check against the answers" after exercise 1.42 resolves to 1.42 without repeating the number
-- 📖 **Semantic textbook search** — every PDF page is embedded at ingest (`qwen3-embedding-8b`); queries are matched by meaning via cosine similarity plus exact-number FTS, so "explain the powers topic" finds the right pages even when the text layer of the PDF is mangled
-- 👁 **Vision over pages** — when the brain model supports images, matched pages are rendered from the PDF and attached as pictures, so formulas are read the way they are printed, not from a broken text layer
-- ✍️ **Human-sounding essays** — a two-stage pipeline: the brain drafts the content, a writer model rewrites it with an anti-AI-cliché prompt (mixed sentence lengths, banned stock phrases, no lists); math in answers renders as Telegram-native Unicode (a¹ᐟ³, √, ·)
-- 🧮 **Per-task model routing** — receipts, OCR, reasoning and writing each get their own model per quality mode (econ / medium / max) with automatic fallback chains and a live model catalog check at startup
-- 💰 **Budget guard** — every call is priced from live per-token prices and logged in USD against the daily limit: warns at 80%, blocks paid models at 95%, free-model receipts keep working
+-   **Listening mode** — dump homework as text, forwards or photos; images are OCR'd (handwriting and blackboards, Russian included) and acknowledged with a short receipt
+-   **Understands what you mean, not just what you type** — an intent-extraction model reads each message together with the session context: "check against the answers" after exercise 1.42 resolves to 1.42 without repeating the number
+-   **Semantic textbook search** — every PDF page is embedded at ingest (`qwen3-embedding-8b`); queries are matched by meaning via cosine similarity plus exact-number FTS, so "explain the powers topic" finds the right pages even when the text layer of the PDF is mangled
+-   **Vision over pages** — when the brain model supports images, matched pages are rendered from the PDF and attached as pictures, so formulas are read the way they are printed, not from a broken text layer
+-   **Human-sounding essays** — a two-stage pipeline: the brain drafts the content, a writer model rewrites it with an anti-AI-cliché prompt (mixed sentence lengths, banned stock phrases, no lists); math in answers renders as Telegram-native Unicode (a¹ᐟ³, √, ·)
+-   **Per-task model routing** — receipts, OCR, reasoning and writing each get their own model per quality mode (econ / medium / max) with automatic fallback chains and a live model catalog check at startup
+-   **Budget guard** — every call is priced from live per-token prices and logged in USD against the daily limit: warns at 80%, blocks paid models at 95%, free-model receipts keep working
 
 ## Running locally
 

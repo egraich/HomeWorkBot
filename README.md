@@ -20,8 +20,8 @@ The bot only makes outbound connections (Telegram long polling + the AI API), so
 ## Features
 
 - 🎧 **Listening mode** — dump homework as text, forwards or photos; images are OCR'd (handwriting and blackboards, Russian included) and acknowledged with a short receipt
-- 🧠 **Understands what you mean, not just what you type** — an intent-extraction model reads each message together with the session context: «проверь по ответам» after exercise 1.42 resolves to 1.42 without repeating the number
-- 📖 **Semantic textbook search** — every PDF page is embedded at ingest (`qwen3-embedding-8b`); queries are matched by meaning via cosine similarity plus exact-number FTS, so «объясни тему про степени» finds the right pages even when the text layer of the PDF is mangled
+- 🧠 **Understands what you mean, not just what you type** — an intent-extraction model reads each message together with the session context: "check against the answers" after exercise 1.42 resolves to 1.42 without repeating the number
+- 📖 **Semantic textbook search** — every PDF page is embedded at ingest (`qwen3-embedding-8b`); queries are matched by meaning via cosine similarity plus exact-number FTS, so "explain the powers topic" finds the right pages even when the text layer of the PDF is mangled
 - 👁 **Vision over pages** — when the brain model supports images, matched pages are rendered from the PDF and attached as pictures, so formulas are read the way they are printed, not from a broken text layer
 - ✍️ **Human-sounding essays** — a two-stage pipeline: the brain drafts the content, a writer model rewrites it with an anti-AI-cliché prompt (mixed sentence lengths, banned stock phrases, no lists); math in answers renders as Telegram-native Unicode (a¹ᐟ³, √, ·)
 - 🧮 **Per-task model routing** — receipts, OCR, reasoning and writing each get their own model per quality mode (econ / medium / max) with automatic fallback chains and a live model catalog check at startup
@@ -61,7 +61,7 @@ cd src
 
 **Textbook pipeline.** On ingest, PyMuPDF extracts text per page; empty pages are treated as scans, rendered to JPEG and OCR'd by a vision model under a semaphore. Pages go into an FTS5 index *and* an embeddings table (`pages_vec`, float32 blobs) — reindexing a book from the admin panel rebuilds both. At query time an intent model turns the message (plus recent session history) into exercise refs and keywords; refs go to exact FTS matches, the message + keywords are embedded and matched against page vectors by cosine similarity. For vision-capable brains the top matches are also rendered back from the PDF and attached as images, which is what makes formula-heavy textbooks actually readable.
 
-**Essays.** Requests matching an essay pattern run a two-stage pipeline: the brain model produces a content skeleton, then the writer model rewrites it under a prompt that bans stock AI phrases («в современном мире», «стоит отметить»…), enforces mixed sentence lengths and forbids lists — the output reads like a student wrote it. Solved math is normalized to Telegram-native Unicode by a LaTeX→Unicode converter as a safety net.
+**Essays.** Requests matching an essay pattern run a two-stage pipeline: the brain model produces a content skeleton, then the writer model rewrites it under a prompt that bans stock AI phrases (typical model filler openers like "in today's world" or "it is worth noting"), enforces mixed sentence lengths and forbids lists — the output reads like a student wrote it. Solved math is normalized to Telegram-native Unicode by a LaTeX-to-Unicode converter as a safety net.
 
 **Budget.** Hack Club AI allows $3/day per account, shared by everyone using the bot. Each call's cost is computed from live per-token pricing and stored; paid calls are refused past 95% of the budget, with a warning at 80%. The counter resets at 00:00 UTC, same as the provider's.
 

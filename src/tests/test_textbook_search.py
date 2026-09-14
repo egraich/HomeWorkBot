@@ -38,17 +38,18 @@ def test_excerpts_use_textbook_ids_not_subject_ids(tmp_path: Path, db: Database)
         algebra = next(s for s in subjects if s["name"] == "Алгебра")
         tb_id = await db.add_textbook(algebra["id"], "algebra11.pdf", "Алгебра 11")
         assert tb_id != algebra["id"]
+        await db.upsert_user(1, "u", "U", False)
 
-        await db.replace_pages(tb_id, [
-            (143, "Упражнение 1.43. Решите уравнение и постройте график функции"),
-        ])
-
-        session = SessionInfo(
-            id=1, user_id=1, tg_chat_id=1, class_id=class_id,
-            subject_ids=[algebra["id"]], status="collecting", essay_style="clean",
+        sid = await db.create_session(1, 1, class_id, [algebra["id"]])
+        await db.add_message(
+            sid, "assistant", "plan", "1. [Алгебра] 1.42а: 27¹ᐟ³ · 0,064⁻²ᐟ³ → решить"
         )
-        excerpts = await textbook_excerpts(db, session, ["задано упражнение 1.43"])
-        assert excerpts and excerpts[0]["page_no"] == 143
+        await db.add_message(sid, "user", "text", "проверь по ответам в книге")
+        session = await db.get_session(sid)
+
+        excerpts = await textbook_excerpts(db, session, ["проверь по ответам в книге"])
+        assert excerpts
+        assert any(e["page_no"] in (18, 200) for e in excerpts)
 
     asyncio.run(run())
 

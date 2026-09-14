@@ -55,13 +55,15 @@ def unique_path(directory: Path, filename: str) -> Path:
 
 
 def extract_references(text: str) -> list[str]:
-    """Extract exercise/page numbers mentioned in a text ("1.43", "5", "214a")."""
+    """Extract exercise/page numbers ("1.43", "5", "214a", "1.42a")."""
     refs = re.findall(
         r"(?:№\s*|упр(?:ажнение)?\s*|стр(?:аниц[аы]|\.?)\s*)"
         r"(\d{1,4}(?:[.,]\d{1,3})?[а-я]?)",
         text,
         re.IGNORECASE,
     )
+    # standalone dotted numbers ("реши 1.43") are exercise-style references too
+    refs += re.findall(r"(?<![\d.])(\d{1,3}\.\d{1,3}[а-я]?)(?![\d.])", text)
     return list(dict.fromkeys(r.replace(",", ".") for r in refs))
 
 

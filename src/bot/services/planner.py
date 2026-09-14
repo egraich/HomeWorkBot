@@ -1,22 +1,6 @@
 """Homework assembly: session materials + textbook excerpts -> model messages."""
 from __future__ import annotations
 
-from bot.db.repo import Database, SessionInfo
-from bot.services.textbooks import extract_references
-
-MAX_EXCERPT_CHARS = 1200
-MAX_DIALOG_CHARS = 16000
-
-
-async def collect_session_items(db: Database, session: SessionInfo) -> list[dict]:
-    """Return all user-submitted materials of a session in chronological order."""
-    msgs = await db.list_messages(session.id)
-    return [m for m in msgs if m["role"] == "user"]
-
-
-"""Homework assembly: session materials + textbook excerpts -> model messages."""
-from __future__ import annotations
-
 import re
 
 from bot.db.repo import Database, SessionInfo

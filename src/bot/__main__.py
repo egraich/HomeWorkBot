@@ -22,6 +22,7 @@ from bot.middlewares import AuthMiddleware, LoggingMiddleware, ThrottleMiddlewar
 from bot.services.container import Services
 from bot.services.llm.catalog import ModelCatalog
 from bot.services.llm.client import LLMClient
+from bot.services.llm.embeddings import Embedder
 from bot.services.llm.router import Router
 from bot.services.llm.usage import Usage
 from bot.services.textbooks import TextbookService
@@ -55,10 +56,11 @@ async def main() -> None:
     usage = Usage(db, cfg, catalog)
     router = Router(catalog)
     llm = LLMClient(cfg, db, catalog, router, usage)
-    textbooks = TextbookService(cfg, db, llm)
+    embedder = Embedder(cfg, usage)
+    textbooks = TextbookService(cfg, db, llm, embedder)
     services = Services(
         cfg=cfg, db=db, catalog=catalog, router=router, usage=usage,
-        llm=llm, textbooks=textbooks,
+        llm=llm, embedder=embedder, textbooks=textbooks,
     )
 
     tg_session = None

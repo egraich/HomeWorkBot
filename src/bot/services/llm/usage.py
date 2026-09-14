@@ -53,12 +53,16 @@ class Usage:
                             spent, self.cfg.daily_budget_usd, self.cfg.budget_warn * 100)
         return cost
 
+    async def record_embedding(self, model_id: str, prompt_tokens: int, cost: float) -> None:
+        """Persist an embeddings call (input tokens only)."""
+        await self.db.add_usage(model_id, "embed", prompt_tokens, 0, cost)
+
     async def status_text(self) -> str:
         """Build the HTML spend summary shown in the admin panel."""
         spent = await self.spent_today()
         rows = await self.db.usage_today_breakdown()
         task_names = {"quick": "квитанции", "ocr": "распознавание",
-                      "brain": "мозг", "writer": "писатель"}
+                      "brain": "мозг", "writer": "писатель", "embed": "эмбеддинги"}
         lines = [
             f"💰 <b>Расход за сегодня (UTC)</b>",
             f"{spent:.4f} из {self.cfg.daily_budget_usd:.2f} $ "

@@ -2,12 +2,21 @@
 from __future__ import annotations
 
 import json
+from array import array
 from dataclasses import dataclass
 from pathlib import Path
 
 import aiosqlite
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two equal-length vectors."""
+    dot = sum(x * y for x, y in zip(a, b))
+    na = sum(x * x for x in a) ** 0.5
+    nb = sum(y * y for y in b) ** 0.5
+    return dot / (na * nb) if na and nb else 0.0
 
 
 @dataclass(slots=True)
@@ -276,6 +285,60 @@ class Database:
             {"page_no": r["page_no"], "text": r["text"], "textbook_id": r["textbook_id"]}
             for r in rows
         ]
+
+    async def add_page_vectors(
+        self, textbook_id: int, rows: list[tuple[int, list[float]]]
+    ) -> None:
+        """Replace stored page embeddings of one textbook (float32 blobs)."""
+        await self.delete_page_vectors(textbook_id)
+        for page_no, vec in rows:
+            await self.conn.execute(
+                "INSERT OR REPLACE INTO pages_vec (textbook_id, page_no, embedding) "
+                "VALUES (?, ?, ?)",
+                (textbook_id, page_no, array("f", vec).tobytes()),
+            )
+        await self.conn.commit()
+
+    async def delete_page_vectors(self, textbook_id: int) -> None:
+        """Drop stored page embeddings of one textbook."""
+        await self.conn.execute(
+            "DELETE FROM pages_vec WHERE textbook_id = ?", (textbook_id,)
+        )
+        await self.conn.commit()
+
+    async def vector_search(
+        self, textbook_ids: list[int], query: list[float], k: int = 4
+    ) -> list[dict]:
+        """Cosine similarity search over stored page vectors, best matches first."""
+        if not textbook_ids:
+            return []
+        placeholders = ",".join("?" * len(textbook_ids))
+        cur = await self.conn.execute(
+            f"SELECT textbook_id, page_no, embedding FROM pages_vec "
+            f"WHERE textbook_id IN ({placeholders})",
+            list(textbook_ids),
+        )
+        scored: list[tuple[float, int, int]] = []
+        for r in await cur.fetchall():
+            vec = array("f", r["embedding"]).tolist()
+            scored.append((_cosine(query, vec), r["textbook_id"], r["page_no"]))
+        scored.sort(reverse=True)
+
+        out: list[dict] = []
+        for score, textbook_id, page_no in scored[:k]:
+            cur2 = await self.conn.execute(
+                "SELECT text FROM pages WHERE textbook_id = ? AND page_no = ?",
+                (textbook_id, page_no),
+            )
+            row = await cur2.fetchone()
+            if row:
+                out.append({
+                    "page_no": page_no,
+                    "text": row["text"],
+                    "textbook_id": textbook_id,
+                    "score": round(score, 3),
+                })
+        return out
 
     async def create_session(
         self, user_id: int, tg_chat_id: int, class_id: int | None, subject_ids: list[int]

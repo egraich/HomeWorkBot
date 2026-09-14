@@ -41,6 +41,13 @@ CREATE TABLE IF NOT EXISTS pages (
 
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(text, page_id UNINDEXED);
 
+CREATE TABLE IF NOT EXISTS pages_vec (
+    textbook_id INTEGER NOT NULL REFERENCES textbooks(id) ON DELETE CASCADE,
+    page_no     INTEGER NOT NULL,
+    embedding   BLOB NOT NULL,
+    UNIQUE (textbook_id, page_no)
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id     INTEGER NOT NULL REFERENCES users(tg_id),

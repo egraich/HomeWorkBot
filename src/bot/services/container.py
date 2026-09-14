@@ -7,6 +7,7 @@ from bot.config import Config
 from bot.db.repo import Database
 from bot.services.llm.catalog import ModelCatalog
 from bot.services.llm.client import LLMClient
+from bot.services.llm.embeddings import Embedder
 from bot.services.llm.router import Router
 from bot.services.llm.usage import Usage
 from bot.services.textbooks import TextbookService
@@ -22,4 +23,5 @@ class Services:
     router: Router
     usage: Usage
     llm: LLMClient
+    embedder: Embedder
     textbooks: TextbookService

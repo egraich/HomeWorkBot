@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramEntityTooLarge
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from bot.config import QUALITY_MODES
 from bot.keyboards import (
@@ -28,6 +29,54 @@ from bot.states import AdminFSM
 
 router = Router(name="admin")
 log = logging.getLogger(__name__)
+
+
+def _launch_ingest(
+    services: Services, path: Path, subject_id: int, textbook_id: int, progress_msg: Message
+) -> None:
+    """Run textbook ingestion in the background with progress updates."""
+    async def progress_cb(done: int, total_ocr: int, pages: int) -> None:
+        try:
+            await progress_msg.edit_text(
+                f"⏳ {path.name}: страниц {pages}, OCR {done}/{total_ocr}"
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def runner() -> None:
+        try:
+            stats = await services.textbooks.ingest(
+                path, subject_id, textbook_id, progress_cb=progress_cb
+            )
+            scan = " (скан)" if stats["is_scanned"] else ""
+            await progress_msg.edit_text(
+                f"✅ <b>{path.name}</b>: {stats['pages']} стр., "
+                f"OCR: {stats['ocr_pages']}{scan} — готово, можно решать"
+            )
+        except Exception as e:  # noqa: BLE001
+            log.exception("Ingest failed")
+            await services.db.fail_textbook(textbook_id)
+            await progress_msg.edit_text(f"❌ Инжест упал: <code>{e}</code>")
+
+    asyncio.create_task(runner())
+
+
+@router.callback_query(F.data.startswith("adm:reindex:"))
+async def adm_reindex(
+    callback: CallbackQuery, services: Services
+) -> None:
+    """Re-run ingestion for a registered book (rebuilds FTS and vectors)."""
+    if not _is_admin(services, callback.from_user.id):
+        return
+    textbook_id = int(callback.data.split(":")[2])
+    row = await services.db.get_textbook(textbook_id)
+    path = services.cfg.textbooks_dir / row["filename"] if row else None
+    if not row or not path.exists():
+        await callback.answer("Файл книги пропал из data/textbooks", show_alert=True)
+        return
+    await callback.answer("Запустил переиндексацию")
+    progress = await callback.message.answer(f"⏳ Переиндексация <b>{row['filename']}</b>…")
+    _launch_ingest(services, path, row["subject_id"], textbook_id, progress)
 
 
 def _is_admin(services: Services, tg_id: int) -> bool:
@@ -177,11 +226,17 @@ async def adm_book_pick(
         await callback.answer()
         registered = await services.db.list_textbooks()
         lines = ["📚 <b>Зарегистрированные книги</b>"] if registered else ["Пока пусто."]
+        kb = InlineKeyboardBuilder()
         for r in registered:
+            scan = " (скан)" if r["is_scanned"] else ""
             lines.append(
-                f"• {r['filename']} → {r['class_name']}/{r['subject_name']}, {r['pages']} стр."
+                f"• {r['filename']} → {r['class_name']}/{r['subject_name']}, "
+                f"{r['pages']} стр.{scan}"
             )
-        await callback.message.edit_text("\n".join(lines), reply_markup=admin_back_kb())
+            kb.button(text=f"🔁 {r['filename']}", callback_data=f"adm:reindex:{r['id']}")
+        kb.button(text="⬅️ Админка", callback_data="adm")
+        kb.adjust(1)
+        await callback.message.edit_text("\n".join(lines), reply_markup=kb.as_markup())
         return
     if not _is_admin(services, callback.from_user.id):
         return
@@ -290,34 +345,7 @@ async def adm_bind_book(
     progress = await callback.message.edit_text(
         f"⏳ Инжест <b>{path.name}</b> → {subject['name']}…"
     )
-
-    async def progress_cb(done: int, total_ocr: int, pages: int) -> None:
-        """Update the progress message during OCR."""
-        try:
-            await progress.edit_text(
-                f"⏳ {path.name}: страниц {pages}, OCR {done}/{total_ocr}"
-            )
-        except Exception:  # noqa: BLE001
-            pass
-
-    async def runner() -> None:
-        """Run ingestion and report the result or failure."""
-        try:
-            stats = await services.textbooks.ingest(
-                path, subject_id, textbook_id, progress_cb=progress_cb
-            )
-            scan = " (скан)" if stats["is_scanned"] else ""
-            await progress.edit_text(
-                f"✅ <b>{path.name}</b>: {stats['pages']} стр., "
-                f"OCR: {stats['ocr_pages']}{scan}\n"
-                f"Предмет: {subject['name']}"
-            )
-        except Exception as e:  # noqa: BLE001
-            log.exception("Ingest failed")
-            await services.db.fail_textbook(textbook_id)
-            await progress.edit_text(f"❌ Инжест упал: <code>{e}</code>")
-
-    asyncio.create_task(runner())
+    _launch_ingest(services, path, subject_id, textbook_id, progress)
 
 
 @router.callback_query(F.data == "adm:classes")

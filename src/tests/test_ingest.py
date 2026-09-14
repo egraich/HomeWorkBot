@@ -41,7 +41,12 @@ def _service(tmp_path: Path, db: Database) -> TextbookService:
     """Build a TextbookService over a temp data dir."""
     cfg = type("Cfg", (), {"data_dir": tmp_path, "textbooks_dir": tmp_path / "textbooks"})()
     cfg.textbooks_dir.mkdir(exist_ok=True)
-    return TextbookService(cfg, db, DummyLLM())  # type: ignore[arg-type]
+
+    class _Emb:
+        async def embed(self, texts):
+            return [[0.1] * 8 for _ in texts]
+
+    return TextbookService(cfg, db, DummyLLM(), _Emb())  # type: ignore[arg-type]
 
 
 @pytest.fixture()

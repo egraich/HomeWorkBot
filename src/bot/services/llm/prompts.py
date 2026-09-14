@@ -105,6 +105,30 @@ def _image_part(image_bytes: bytes) -> dict:
     }
 
 
+INTENT_SYSTEM = (
+    "Ты — парсер сообщений школьника для домашнего бота. Верни ТОЛЬКО JSON без "
+    "пояснений и без markdown:\n"
+    '{"refs": ["1.42"], "keywords": ["ответы", "степени"]}\n'
+    'Поле "refs" — номера упражнений/страниц, которые имеются в виду (учитывай '
+    'контекст: если в сообщении номера нет, но он очевиден из истории сессии — '
+    'укажи его; «проверь по ответам» после задания 1.42 → refs: ["1.42"]). '
+    'Поле "keywords" — 1–3 слова для смыслового поиска по учебнику. '
+    "Если ничего — пустые списки."
+)
+
+
+def build_intent_messages(text: str, recent: list[str]) -> list[dict]:
+    """Build the intent-extraction request from a message and session context."""
+    context = "\n".join(f"- {r[:200]}" for r in recent) or "—"
+    return [
+        {"role": "system", "content": INTENT_SYSTEM},
+        {
+            "role": "user",
+            "content": f"Сообщение ученика: {text}\n\nПоследние сообщения сессии:\n{context}",
+        },
+    ]
+
+
 def build_ocr_messages(image_data_url: str) -> list[dict]:
     """Build the OCR request messages with an image content part."""
     return [

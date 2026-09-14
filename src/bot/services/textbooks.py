@@ -74,10 +74,11 @@ def _page_to_jpeg(page: "fitz.Page") -> bytes:
 
 
 class TextbookService:
-    def __init__(self, cfg: Config, db: Database, llm: LLMClient) -> None:
+    def __init__(self, cfg: Config, db: Database, llm: LLMClient, embedder) -> None:
         self.cfg = cfg
         self.db = db
         self.llm = llm
+        self.embedder = embedder
         self._tasks: dict[int, asyncio.Task] = {}
 
     async def ingest(
@@ -136,6 +137,19 @@ class TextbookService:
         await self.db.finish_textbook(
             textbook_id, pages=total, ocr_pages=len(empty), is_scanned=is_scanned
         )
+
+        # semantic index: embed every page so search works by meaning too
+        try:
+            vectors = await self.embedder.embed([t for _, t in rows])
+            await self.db.add_page_vectors(
+                textbook_id, [(no, vec) for (no, _), vec in zip(rows, vectors)]
+            )
+            log.info("page embeddings stored: %s (%d)", pdf_path.name, len(vectors))
+        except Exception as e:  # noqa: BLE001
+            log.warning(
+                "page embeddings failed for %s — FTS search still works: %s",
+                pdf_path.name, e,
+            )
         log.info("Ingested %s: %d pages (OCR: %d)", pdf_path.name, total, len(empty))
         return {"pages": total, "ocr_pages": len(empty), "is_scanned": is_scanned}
 

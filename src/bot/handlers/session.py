@@ -287,7 +287,7 @@ async def _make_plan(
     subject_names = [s["name"] for s in subject_rows]
     class_name = await _class_name(services, session)
     excerpts = await textbook_excerpts(
-        services.db, session, [i["content"] for i in items]
+        services, session, [i["content"] for i in items]
     )
 
     # vision-capable brains get the actual page images: formula text layers

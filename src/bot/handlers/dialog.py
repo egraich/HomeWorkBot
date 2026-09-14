@@ -45,7 +45,7 @@ async def _run_brain(
 ) -> None:
     """Answer a dialog message with the brain model, streaming to Telegram."""
     history = await services.db.list_messages(session.id, limit=24)
-    excerpts = await textbook_excerpts(services.db, session, [text])
+    excerpts = await textbook_excerpts(services, session, [text])
 
     # vision-capable brains get the actual page images: formula text layers
     # of textbooks are often too mangled to read
